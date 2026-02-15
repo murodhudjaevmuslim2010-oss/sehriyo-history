@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Исторический Захват Территории</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700;900&family=Cinzel:wght@400;600;700;900&family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+</head>
+
+<body>
+    <!-- Навигация -->
+    <nav class="historical-nav">
+        <div class="logo">
+            <i class="fas fa-crown"></i>
+            <span id="title-text">Исторический Захват Территории</span>
+            <i class="fas fa-chess-rook"></i>
+        </div>
+        <div class="nav-controls">
+            <button id="loginBtn" class="nav-btn">
+                <i class="fas fa-sign-in-alt"></i>
+                <span id="login-text">Войти</span>
+            </button>
+            <button id="languageToggle" class="nav-btn">
+                <i class="fas fa-globe"></i>
+                <span id="lang-text">EN</span>
+            </button>
+            <button id="themeToggle" class="nav-btn">
+                <i class="fas fa-moon"></i>
+                <span id="theme-text">Тема</span>
+            </button>
+            <button id="soundToggle" class="nav-btn">
+                <i class="fas fa-volume-up"></i>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Главный контейнер -->
+    <main id="app">
+        <!-- Экран главного меню -->
+        <div id="mainMenu" class="screen active">
+            <div class="hero-section">
+                <!-- Animated particle background -->
+                <canvas id="particleCanvas" class="particle-canvas"></canvas>
+
+                <div class="hero-title">
+                    <h1><span class="highlight">Исторический</span> Захват Территории</h1>
+                    <p class="subtitle">Покоряйте земли с помощью знаний истории!</p>
+                </div>
+
+                <div class="menu-actions">
+                    <button id="startSinglePlayer" class="historical-btn btn-large">
+                        <i class="fas fa-user"></i>
+                        <span>Одиночная игра</span>
+                    </button>
+                    <button id="startMultiplayer" class="historical-btn btn-large">
+                        <i class="fas fa-users"></i>
+                        <span>Мультиплеер</span>
+                    </button>
+                    <button id="showHowToPlay" class="historical-btn btn-large">
+                        <i class="fas fa-book"></i>
+                        <span>Как играть</span>
+                    </button>
+                    <button id="showSettings" class="historical-btn btn-large">
+                        <i class="fas fa-cog"></i>
+                        <span>Настройки</span>
+                    </button>
+                </div>
+
+                <!-- Glow divider -->
+                <div class="glow-divider"></div>
+
+                <div class="quick-stats">
+                    <div class="stat-card glass-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-trophy"></i>
+                        </div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="totalGames">0</span>
+                            <span class="stat-label">Сыграно игр</span>
+                        </div>
+                    </div>
+                    <div class="stat-card glass-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-flag"></i>
+                        </div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="territoriesCaptured">0</span>
+                            <span class="stat-label">Захвачено территорий</span>
+                        </div>
+                    </div>
+                    <div class="stat-card glass-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-brain"></i>
+                        </div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="correctAnswers">0%</span>
+                            <span class="stat-label">Правильных ответов</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Экран выбора настроек -->
+        <div id="settingsScreen" class="screen">
+            <div class="screen-header">
+                <button class="back-btn" onclick="game.showScreen('mainMenu')">
+                    <i class="fas fa-arrow-left"></i> Назад
+                </button>
+                <h2>Настройки игры</h2>
+            </div>
+
+            <div class="settings-container">
+                <div class="setting-group">
+                    <h3><i class="fas fa-map"></i> Выбор континента</h3>
+                    <div class="continents-grid">
+                        <div class="continent-card" data-continent="europe">
+                            <div class="continent-icon">
+                                <i class="fas fa-landmark"></i>
+                            </div>
+                            <h4>Европа</h4>
+                            <p>От античности до современности</p>
+                            <div class="continent-tag">120 вопросов</div>
+                        </div>
+                        <div class="continent-card" data-continent="asia">
+                            <div class="continent-icon">
+                                <i class="fas fa-dragon"></i>
+                            </div>
+                            <h4>Азия</h4>
+                            <p>Древние цивилизации и империи</p>
+                            <div class="continent-tag">95 вопросов</div>
+                        </div>
+                        <div class="continent-card" data-continent="americas">
+                            <div class="continent-icon">
+                                <i class="fas fa-mountain"></i>
+                            </div>
+                            <h4>Америки</h4>
+                            <p>От майя до современности</p>
+                            <div class="continent-tag">80 вопросов</div>
+                        </div>
+                        <div class="continent-card" data-continent="africa">
+                            <div class="continent-icon">
+                                <i class="fas fa-globe-africa"></i>
+                            </div>
+                            <h4>Африка</h4>
+                            <p>Колыбель человечества</p>
+                            <div class="continent-tag">70 вопросов</div>
+                        </div>
+                        <div class="continent-card" data-continent="world">
+                            <div class="continent-icon">
+                                <i class="fas fa-globe"></i>
+                            </div>
+                            <h4>Всемирная история</h4>
+                            <p>Все континенты</p>
+                            <div class="continent-tag">300+ вопросов</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="setting-group">
+                    <h3><i class="fas fa-hourglass"></i> Исторический период</h3>
+                    <div class="periods-grid">
+                        <button class="period-btn" data-period="antiquity">Античность</button>
+                        <button class="period-btn" data-period="middle_ages">Средневековье</button>
+                        <button class="period-btn" data-period="renaissance">Ренессанс</button>
+                        <button class="period-btn" data-period="19th_century">XIX век</button>
+                        <button class="period-btn" data-period="20th_century">XX век</button>
+                        <button class="period-btn" data-period="modern">Новейшее время</button>
+                        <button class="period-btn active" data-period="any">Любые</button>
+                    </div>
+                </div>
+
+                <div class="setting-group">
+                    <h3><i class="fas fa-sliders-h"></i> Сложность</h3>
+                    <div class="difficulty-selector">
+                        <button class="diff-btn" data-diff="1">Легко</button>
+                        <button class="diff-btn active" data-diff="2">Средне</button>
+                        <button class="diff-btn" data-diff="3">Сложно</button>
+                    </div>
+                </div>
+
+                <div class="setting-group">
+                    <h3><i class="fas fa-chess-board"></i> Размер карты</h3>
+                    <div class="map-size-selector">
+                        <button class="size-btn" data-size="small">Маленькая (13 территорий)</button>
+                        <button class="size-btn active" data-size="medium">Средняя (21 территория)</button>
+                        <button class="size-btn" data-size="large">Большая (33 территории)</button>
+                    </div>
+                </div>
+
+                <button id="startGameBtn" class="historical-btn btn-xlarge">
+                    <i class="fas fa-play"></i> Начать игру
+                </button>
+            </div>
+        </div>
+
+        <!-- Экран игры -->
+        <div id="gameScreen" class="screen">
+            <div class="game-header">
+                <div class="game-info">
+                    <div class="info-item">
+                        <span class="info-label">Континент:</span>
+                        <span id="currentContinent" class="info-value">Европа</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Период:</span>
+                        <span id="currentPeriod" class="info-value">Любой</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Сложность:</span>
+                        <span id="currentDifficulty" class="info-value">Средняя</span>
+                    </div>
+                </div>
+
+                <div class="game-stats">
+                    <div class="stat-item">
+                        <i class="fas fa-flag"></i>
+                        <span id="capturedCount">0</span>/<span id="totalTerritories">20</span>
+                    </div>
+                    <div class="stat-item">
+                        <i class="fas fa-clock"></i>
+                        <span id="timer">30</span>с
+                    </div>
+                    <div class="stat-item">
+                        <i class="fas fa-star"></i>
+                        <span id="score">0</span>
+                    </div>
+                </div>
+
+                <button id="pauseGame" class="nav-btn">
+                    <i class="fas fa-pause"></i>
+                </button>
+            </div>
+
+            <div class="game-content">
+                <!-- Карта -->
+                <div class="map-container">
+                    <div class="map-header">
+                        <h3 id="mapTitle">Карта Европы</h3>
+                        <div class="map-controls">
+                            <button id="zoomIn" class="map-btn"><i class="fas fa-search-plus"></i></button>
+                            <button id="zoomOut" class="map-btn"><i class="fas fa-search-minus"></i></button>
+                            <button id="centerMap" class="map-btn"><i class="fas fa-crosshairs"></i></button>
+                        </div>
+                    </div>
+                    <div id="territoryMap" class="territory-map">
+                        <!-- Карта будет генерироваться в JS -->
+                    </div>
+                </div>
+
+                <!-- Вопрос -->
+                <div class="question-container">
+                    <div class="question-header">
+                        <h3>Вопрос №<span id="questionNumber">1</span></h3>
+                        <div class="question-meta">
+                            <span class="meta-item" id="questionCategory">Античность</span>
+                            <span class="meta-item" id="questionDifficulty">Средняя</span>
+                        </div>
+                    </div>
+
+                    <div class="question-card">
+                        <div class="question-text" id="questionText">
+                            Загрузка вопроса...
+                        </div>
+
+                        <div class="answers-grid" id="answersContainer">
+                            <!-- Варианты ответов будут здесь -->
+                        </div>
+
+                        <div class="question-footer">
+                            <div class="timer-container">
+                                <div class="timer-bar">
+                                    <div class="timer-progress" id="timerProgress"></div>
+                                </div>
+                                <div class="timer-text">Осталось: <span id="timeLeft">30</span> сек</div>
+                            </div>
+
+                            <button id="skipQuestion" class="historical-btn btn-secondary">
+                                <i class="fas fa-forward"></i> Пропустить
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="explanation-card" id="explanationCard" style="display: none;">
+                        <h4><i class="fas fa-info-circle"></i> Историческая справка</h4>
+                        <p id="explanationText"></p>
+                        <button id="nextQuestion" class="historical-btn">
+                            <i class="fas fa-arrow-right"></i> Продолжить
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Экран результатов -->
+        <div id="resultsScreen" class="screen">
+            <div class="results-container">
+                <div class="results-header">
+                    <h2><i class="fas fa-trophy"></i> Игра завершена!</h2>
+                    <p id="resultMessage">Вы успешно захватили территорию!</p>
+                </div>
+
+                <div class="results-stats">
+                    <div class="result-stat">
+                        <div class="result-icon">
+                            <i class="fas fa-flag"></i>
+                        </div>
+                        <div class="result-info">
+                            <span class="result-value" id="resultTerritories">0</span>
+                            <span class="result-label">Захвачено территорий</span>
+                        </div>
+                    </div>
+                    <div class="result-stat">
+                        <div class="result-icon">
+                            <i class="fas fa-check-circle"></i>
+                        </div>
+                        <div class="result-info">
+                            <span class="result-value" id="resultCorrect">0</span>/<span id="resultTotal">0</span>
+                            <span class="result-label">Правильных ответов</span>
+                        </div>
+                    </div>
+                    <div class="result-stat">
+                        <div class="result-icon">
+                            <i class="fas fa-star"></i>
+                        </div>
+                        <div class="result-info">
+                            <span class="result-value" id="resultScore">0</span>
+                            <span class="result-label">Очков</span>
+                        </div>
+                    </div>
+                    <div class="result-stat">
+                        <div class="result-icon">
+                            <i class="fas fa-clock"></i>
+                        </div>
+                        <div class="result-info">
+                            <span class="result-value" id="resultTime">0</span>
+                            <span class="result-label">Секунд в среднем</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="results-actions">
+                    <button onclick="game.restartGame()" class="historical-btn btn-large">
+                        <i class="fas fa-redo"></i> Играть снова
+                    </button>
+                    <button onclick="game.showScreen('mainMenu')" class="historical-btn btn-large">
+                        <i class="fas fa-home"></i> Главное меню
+                    </button>
+                    <button onclick="game.shareResults()" class="historical-btn btn-large">
+                        <i class="fas fa-share"></i> Поделиться
+                    </button>
+                </div>
+
+                <div class="history-facts">
+                    <h4><i class="fas fa-scroll"></i> Исторические факты, которые вы узнали:</h4>
+                    <div id="learnedFacts">
+                        <!-- Факты будут здесь -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Экран паузы -->
+        <div id="pauseScreen" class="overlay" style="display: none;">
+            <div class="pause-container">
+                <h2><i class="fas fa-pause"></i> Игра на паузе</h2>
+                <p>Что вы хотите сделать?</p>
+
+                <div class="pause-actions">
+                    <button onclick="game.resumeGame()" class="historical-btn btn-large">
+                        <i class="fas fa-play"></i> Продолжить
+                    </button>
+                    <button onclick="game.restartGame()" class="historical-btn btn-large">
+                        <i class="fas fa-redo"></i> Начать заново
+                    </button>
+                    <button onclick="game.showScreen('mainMenu')" class="historical-btn btn-large">
+                        <i class="fas fa-home"></i> Выйти в меню
+                    </button>
+                    <button onclick="game.showSettings()" class="historical-btn btn-large">
+                        <i class="fas fa-cog"></i> Настройки
+                    </button>
+                </div>
+            </div>
+        </div>
+        <!-- Экран "Как играть" -->
+        <div id="howToPlayScreen" class="screen">
+            <div class="screen-header">
+                <button class="back-btn" onclick="game.showScreen('mainMenu')">
+                    <i class="fas fa-arrow-left"></i> Назад
+                </button>
+                <h2>Как играть</h2>
+            </div>
+
+            <div class="settings-container">
+                <div class="setting-group">
+                    <h3><i class="fas fa-chess-rook"></i> Цель игры</h3>
+                    <p>Захватите все территории на карте, правильно отвечая на исторические вопросы. Чем сложнее вопрос
+                        и быстрее ответ, тем больше очков вы получите!</p>
+                </div>
+
+                <div class="setting-group">
+                    <h3><i class="fas fa-mouse-pointer"></i> Управление</h3>
+                    <ul style="list-style-position: inside; margin-top: 10px;">
+                        <li>Выберите правильный ответ из четырех вариантов.</li>
+                        <li>Используйте бонусы и подсказки (в разработке).</li>
+                        <li>Следите за таймером! У вас есть 30 секунд на ответ.</li>
+                    </ul>
+                </div>
+
+                <div class="setting-group">
+                    <h3><i class="fas fa-trophy"></i> Начисление очков</h3>
+                    <ul style="list-style-position: inside; margin-top: 10px;">
+                        <li>Правильный ответ: +100 очков</li>
+                        <li>Бонус за скорость: до +150 очков</li>
+                        <li>Бонус за сложность: до +150 очков</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Окно Логина / Регистрации -->
+        <div id="loginModal" class="overlay" style="display: none;">
+            <div class="login-container glass-card">
+                <div class="login-header">
+                    <h2><i class="fas fa-user-shield"></i> Аутентификация</h2>
+                    <button id="closeLogin" class="close-btn"><i class="fas fa-times"></i></button>
+                </div>
+
+                <div class="login-tabs">
+                    <button class="tab-btn active" data-tab="loginTab">Вход</button>
+                    <button class="tab-btn" data-tab="registerTab">Регистрация</button>
+                </div>
+
+                <div id="loginTab" class="tab-content active">
+                    <form id="loginForm">
+                        <div class="input-group">
+                            <label><i class="fas fa-user"></i> Имя пользователя</label>
+                            <input type="text" placeholder="Введите имя..." required>
+                        </div>
+                        <div class="input-group">
+                            <label><i class="fas fa-lock"></i> Пароль</label>
+                            <input type="password" placeholder="Введите пароль..." required>
+                        </div>
+                        <button type="submit" class="historical-btn btn-large">Войти в систему</button>
+                    </form>
+                </div>
+
+                <div id="registerTab" class="tab-content">
+                    <form id="registerForm">
+                        <div class="input-group">
+                            <label><i class="fas fa-user"></i> Имя пользователя</label>
+                            <input type="text" placeholder="Придумайте имя..." required>
+                        </div>
+                        <div class="input-group">
+                            <label><i class="fas fa-envelope"></i> Email</label>
+                            <input type="email" placeholder="example@mail.com" required>
+                        </div>
+                        <div class="input-group">
+                            <label><i class="fas fa-lock"></i> Пароль</label>
+                            <input type="password" placeholder="Минимум 6 символов..." required>
+                        </div>
+                        <button type="submit" class="historical-btn btn-large">Создать аккаунт</button>
+                    </form>
+                </div>
+
+                <div class="social-login">
+                    <p>Или войти через</p>
+                    <div class="social-icons">
+                        <button class="social-btn"><i class="fab fa-google"></i></button>
+                        <button class="social-btn"><i class="fab fa-discord"></i></button>
+                        <button class="social-btn"><i class="fab fa-vk"></i></button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Футер -->
+    <footer class="historical-footer">
+        <div class="footer-content">
+            <div class="footer-section">
+                <h4>Исторический Захват Территории</h4>
+                <p>Образовательная игра по истории © 2024</p>
+            </div>
+            <div class="footer-section">
+                <h4>Статистика</h4>
+                <p>Всего вопросов: <span id="totalQuestions">153</span></p>
+                <p>Фактов: <span id="totalFacts">153</span></p>
+            </div>
+            <div class="footer-section">
+                <h4>Разработка</h4>
+                <p>Создано с <i class="fas fa-heart"></i> для любителей истории</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="assets/js/background.js"></script>
+    <script src="script.js"></script>
+</body>
+
+</html>
