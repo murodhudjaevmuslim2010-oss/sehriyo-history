@@ -2992,6 +2992,62 @@ const game = {
         document.getElementById('correctAnswers').textContent = `${correctPercentage}%`;
     },
 
+    // Показать глобальную таблицу лидеров
+    async showLeaderboard() {
+        this.showScreen('leaderboardScreen');
+        const tbody = document.getElementById('globalLeaderboardBody');
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">Загрузка данных истории...</td></tr>';
+
+        try {
+            const snapshot = await db.ref('users').once('value');
+            const usersData = snapshot.val() || {};
+            
+            // Преобразуем в массив и фильтруем тех, у кого есть статистика
+            const leaderboard = Object.entries(usersData)
+                .map(([uid, data]) => ({
+                    uid,
+                    name: data.displayName || "Анонимный стратег",
+                    stats: data.stats || { totalGames: 0, totalTerritories: 0, correctAnswers: 0, totalQuestions: 0 }
+                }))
+                .filter(u => u.stats.totalGames > 0)
+                // Сортируем по количеству захваченных территорий (или можно по очкам)
+                .sort((a, b) => b.stats.totalTerritories - a.stats.totalTerritories);
+
+            tbody.innerHTML = '';
+            
+            if (leaderboard.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">История еще не знает своих героев. Будьте первым!</td></tr>';
+                return;
+            }
+
+            leaderboard.forEach((player, index) => {
+                const tr = document.createElement('tr');
+                tr.className = `rank-${index + 1}`;
+                
+                const accuracy = player.stats.totalQuestions ? 
+                    Math.round((player.stats.correctAnswers / player.stats.totalQuestions) * 100) : 0;
+
+                tr.innerHTML = `
+                    <td><span class="rank-badge">${index + 1}</span></td>
+                    <td>
+                        <div class="player-name-cell">
+                            <i class="fas fa-user-shield" style="color: var(--accent-gold); opacity: 0.7;"></i>
+                            <strong>${player.name}</strong>
+                        </div>
+                    </td>
+                    <td>${player.stats.totalGames}</td>
+                    <td><i class="fas fa-map-marked-alt" style="color: var(--accent-gold); margin-right: 5px;"></i> ${player.stats.totalTerritories}</td>
+                    <td><span class="accuracy-badge">${accuracy}%</span></td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+        } catch (e) {
+            console.error("Leaderboard error:", e);
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--error-color);">Ошибка при получении летописей.</td></tr>';
+        }
+    },
+
     // Начало игры
     startGame() {
         this.resetGameState();
@@ -4811,6 +4867,10 @@ window.addEventListener('DOMContentLoaded', () => {
         document.getElementById('authSubtitle').textContent = isReg ? 'Присоединяйтесь к истории' : 'Войдите, чтобы сохранить прогресс';
         document.getElementById('authSubmitText').textContent = isReg ? 'Зарегистрироваться' : 'Войти';
         document.getElementById('authError').style.display = 'none';
+        
+        // Показываем/скрываем поле имени
+        document.getElementById('nameInputGroup').style.display = isReg ? 'block' : 'none';
+        document.getElementById('authName').required = isReg;
     }
 
     // Обработка формы
@@ -4818,6 +4878,7 @@ window.addEventListener('DOMContentLoaded', () => {
         e.preventDefault();
         const email = document.getElementById('authEmail').value;
         const password = document.getElementById('authPassword').value;
+        const name = document.getElementById('authName').value;
         const errorEl = document.getElementById('authError');
         
         errorEl.style.display = 'none';
@@ -4825,7 +4886,14 @@ window.addEventListener('DOMContentLoaded', () => {
 
         try {
             if (isRegisterMode) {
-                await auth.createUserWithEmailAndPassword(email, password);
+                const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+                const user = userCredential.user;
+                
+                // Сохраняем имя в профиль Firebase
+                await user.updateProfile({ displayName: name });
+                
+                // Сохраняем имя в базу данных для админки/статистики
+                await db.ref(`users/${user.uid}/displayName`).set(name);
             } else {
                 await auth.signInWithEmailAndPassword(email, password);
             }
@@ -4855,7 +4923,12 @@ window.addEventListener('DOMContentLoaded', () => {
         if (user) {
             loginBtn.style.display = 'none';
             userInfo.style.display = 'flex';
-            userNameEl.textContent = user.email.split('@')[0];
+            userNameEl.textContent = user.displayName || user.email.split('@')[0];
+            
+            // Если имя есть, но не в базе (для старых юзеров), пушим его
+            if (user.displayName) {
+                db.ref(`users/${user.uid}/displayName`).set(user.displayName);
+            }
             
             // Синхронизация: если есть локальная стата, пушим ее в облако при первом входе
             const localStats = localStorage.getItem('historyGameStats');

@@ -665,6 +665,11 @@
                     <h2 id="authTitle">С возвращением!</h2>
                     <p id="authSubtitle">Войдите, чтобы сохранить свой прогресс</p>
                     
+                    <div id="nameInputGroup" class="input-group" style="display: none;">
+                        <i class="fas fa-user"></i>
+                        <input type="text" id="authName" placeholder="Ваше имя">
+                    </div>
+
                     <div class="input-group">
                         <i class="fas fa-envelope"></i>
                         <input type="email" id="authEmail" placeholder="Email" required>
@@ -682,6 +687,33 @@
                         <i class="fas fa-arrow-right"></i>
                     </button>
                 </form>
+            </div>
+        </div>
+
+        <!-- Экран Таблицы Лидеров -->
+        <div id="leaderboardScreen" class="screen">
+            <div class="screen-header">
+                <button class="back-btn" onclick="game.showScreen('mainMenu')">
+                    <i class="fas fa-arrow-left"></i> Назад
+                </button>
+                <h2><i class="fas fa-trophy"></i> Глобальная Таблица Лидеров</h2>
+            </div>
+            
+            <div class="glass-card table-container">
+                <table class="historical-table">
+                    <thead>
+                        <tr>
+                            <th>Место</th>
+                            <th>Игрок</th>
+                            <th>Игр</th>
+                            <th>Территории</th>
+                            <th>Меткость</th>
+                        </tr>
+                    </thead>
+                    <tbody id="globalLeaderboardBody">
+                        <!-- Заполняется динамически -->
+                    </tbody>
+                </table>
             </div>
         </div>
 
