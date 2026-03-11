@@ -1,4 +1,4 @@
-﻿// Основной объект игры
+// Основной объект игры
 const game = {
     // Настройки
     settings: {
@@ -3931,7 +3931,7 @@ const game = {
 
     // Сохранение статистики
     saveStatistics() {
-        const stats = JSON.parse(localStorage.getItem('historyGameStats') || '{}');
+        const stats = this.userStats || JSON.parse(localStorage.getItem('historyGameStats') || '{}');
 
         stats.totalGames = (stats.totalGames || 0) + 1;
         stats.totalTerritories = (stats.totalTerritories || 0) + this.state.capturedTerritories;
@@ -3939,7 +3939,12 @@ const game = {
         stats.totalQuestions = (stats.totalQuestions || 0) + this.state.totalQuestions;
         stats.totalScore = (stats.totalScore || 0) + this.state.score;
 
-        localStorage.setItem('historyGameStats', JSON.stringify(stats));
+        if (this.user) {
+            this.userStats = stats;
+            db.ref(`users/${this.user.uid}/stats`).set(stats);
+        } else {
+            localStorage.setItem('historyGameStats', JSON.stringify(stats));
+        }
     },
 
     // Перезапуск игры
@@ -4075,6 +4080,7 @@ const game = {
 // Инициализация игры при загрузке страницы
 window.addEventListener('DOMContentLoaded', () => {
     game.init();
+    game.initAuth();
 
     // Political Game Button
     document.getElementById('startPoliticalGame')?.addEventListener('click', () => {
@@ -4394,6 +4400,162 @@ if (!firebase.apps.length) {
     firebase.initializeApp(firebaseConfig);
 }
 const db = firebase.database();
+const auth = firebase.auth();
+
+// ——— Переменные состояния Аутентификации ———
+game.user = null;
+game.userStats = null;
+
+// ——— Инициализация Аутентификации ———
+game.initAuth = function () {
+    auth.onAuthStateChanged(async (user) => {
+        if (user) {
+            this.user = user;
+            console.log("Logged in as:", user.email);
+            
+            // Обновляем UI
+            document.getElementById('authText').textContent = user.displayName || user.email.split('@')[0];
+            document.getElementById('authBtn').classList.add('logged-in');
+            
+            // Загружаем статистику из БД
+            await this.loadUserStats(user.uid);
+            
+            // Если есть локальная статистика — предлагаем синхронизировать
+            this.checkAndSyncStats();
+            
+            // Обновляем экран входа в комнату
+            const authPlayerName = document.getElementById('authPlayerName');
+            if (authPlayerName) authPlayerName.textContent = user.displayName || user.email.split('@')[0];
+            const playerAuthInfo = document.getElementById('playerAuthInfo');
+            if (playerAuthInfo) playerAuthInfo.style.display = 'block';
+            const playerBatchInput = document.getElementById('playerBatchInput');
+            if (playerBatchInput) playerBatchInput.style.display = 'none';
+
+        } else {
+            this.user = null;
+            this.userStats = null;
+            console.log("Logged out");
+            
+            document.getElementById('authText').textContent = "Войти";
+            document.getElementById('authBtn').classList.remove('logged-in');
+            
+            // Возвращаем UI входа в комнату
+            const playerAuthInfo = document.getElementById('playerAuthInfo');
+            if (playerAuthInfo) playerAuthInfo.style.display = 'none';
+            const playerBatchInput = document.getElementById('playerBatchInput');
+            if (playerBatchInput) playerBatchInput.style.display = 'block';
+        }
+    });
+
+    // Слушатели модального окна
+    const authBtn = document.getElementById('authBtn');
+    const authModal = document.getElementById('authModal');
+    const userMenu = document.getElementById('userMenu');
+
+    authBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (this.user) {
+            // Показываем меню пользователя
+            userMenu.style.display = userMenu.style.display === 'none' ? 'block' : 'none';
+        } else {
+            // Показываем форму входа
+            authModal.style.display = 'flex';
+        }
+    });
+
+    // Закрытие меню при клике вне
+    document.addEventListener('click', () => {
+        userMenu.style.display = 'none';
+    });
+
+    // Переключение табов
+    document.getElementById('tabLogin').addEventListener('click', () => {
+        document.getElementById('tabLogin').classList.add('active');
+        document.getElementById('tabRegister').classList.remove('active');
+        document.getElementById('loginForm').style.display = 'block';
+        document.getElementById('registerForm').style.display = 'none';
+    });
+
+    document.getElementById('tabRegister').addEventListener('click', () => {
+        document.getElementById('tabRegister').classList.add('active');
+        document.getElementById('tabLogin').classList.remove('active');
+        document.getElementById('registerForm').style.display = 'block';
+        document.getElementById('loginForm').style.display = 'none';
+    });
+
+    // Кнопки действий
+    document.getElementById('btnDoLogin').addEventListener('click', () => this.handleLogin());
+    document.getElementById('btnDoRegister').addEventListener('click', () => this.handleRegister());
+    document.getElementById('btnLogOut').addEventListener('click', () => auth.signOut());
+    document.getElementById('btnMyStats').addEventListener('click', () => {
+        this.showScreen('settingsScreen'); // Или отдельный экран статистики
+        userMenu.style.display = 'none';
+    });
+};
+
+game.handleLogin = async function () {
+    const email = document.getElementById('loginEmail').value.trim();
+    const pass = document.getElementById('loginPassword').value;
+    if (!email || !pass) return alert("Заполните все поля");
+
+    try {
+        await auth.signInWithEmailAndPassword(email, pass);
+        document.getElementById('authModal').style.display = 'none';
+    } catch (e) {
+        alert("Ошибка входа: " + e.message);
+    }
+};
+
+game.handleRegister = async function () {
+    const name = document.getElementById('registerName').value.trim();
+    const email = document.getElementById('registerEmail').value.trim();
+    const pass = document.getElementById('registerPassword').value;
+
+    if (!name || !email || !pass) return alert("Заполните все поля");
+    if (pass.length < 6) return alert("Пароль слишком короткий");
+
+    try {
+        const cred = await auth.createUserWithEmailAndPassword(email, pass);
+        await cred.user.updateProfile({ displayName: name });
+        // Обновляем UI сразу
+        document.getElementById('authText').textContent = name;
+        document.getElementById('authModal').style.display = 'none';
+    } catch (e) {
+        alert("Ошибка регистрации: " + e.message);
+    }
+};
+
+game.loadUserStats = async function (uid) {
+    const snapshot = await db.ref(`users/${uid}/stats`).once('value');
+    this.userStats = snapshot.val() || {
+        totalGames: 0,
+        totalTerritories: 0,
+        correctAnswers: 0,
+        totalQuestions: 0,
+        totalScore: 0
+    };
+    // Обновляем статистику в UI футера если нужно
+    this.updateStatsUI();
+};
+
+game.updateStatsUI = function() {
+    const stats = this.userStats || JSON.parse(localStorage.getItem('historyGameStats') || '{}');
+    // Можно обновить элементы в футере или на экране статистики
+};
+
+game.checkAndSyncStats = function() {
+    const localStats = localStorage.getItem('historyGameStats');
+    if (localStats && this.user) {
+        const stats = JSON.parse(localStats);
+        if (stats.totalGames > 0 && (!this.userStats || this.userStats.totalGames === 0)) {
+            if (confirm("У вас есть локальная статистика. Хотите перенести её в свой аккаунт?")) {
+                this.userStats = stats;
+                db.ref(`users/${this.user.uid}/stats`).set(stats);
+                localStorage.removeItem('historyGameStats');
+            }
+        }
+    }
+};
 
 // ============================================
 // TEACHER ROOM — КОМНАТА УЧИТЕЛЯ (ОНЛАЙН)
@@ -4657,8 +4819,11 @@ game.checkRoomCode = async function () {
 
 // Вход в комнату и начало игры (Firebase)
 game.joinRoom = async function () {
-    const code = document.getElementById('roomCodeInput').value.trim().toUpperCase();
-    const name = document.getElementById('playerNameInput').value.trim();
+    const codeInput = document.getElementById('roomCodeInput');
+    const nameInput = document.getElementById('playerNameInput');
+    
+    const code = codeInput.value.trim().toUpperCase();
+    const name = this.user ? (this.user.displayName || this.user.email.split('@')[0]) : nameInput.value.trim();
 
     if (!code || code.length < 6) { alert('Введите 6-значный код комнаты!'); return; }
     if (!name) { alert('Введите ваше имя!'); return; }
@@ -4706,13 +4871,20 @@ game.startRoomGame = function (room, playerName) {
 game.saveRoomResult = async function (roomId, playerName, score, correct, total) {
     if (!roomId) return;
     try {
-        await db.ref('rooms/' + roomId + '/leaderboard').push({
+        const resultData = {
             name: playerName,
             score: score,
             correct: correct,
             total: total,
             date: new Date().toISOString()
-        });
+        };
+        
+        // Если пользователь авторизован — добавляем его UID для связи
+        if (this.user) {
+            resultData.uid = this.user.uid;
+        }
+
+        await db.ref('rooms/' + roomId + '/leaderboard').push(resultData);
     } catch (e) {
         console.error('Ошибка сохранения результата:', e);
     }

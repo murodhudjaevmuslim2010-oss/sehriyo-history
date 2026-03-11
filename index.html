@@ -15,6 +15,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
@@ -43,6 +44,12 @@
             <button id="soundToggle" class="nav-btn">
                 <i class="fas fa-volume-up"></i>
             </button>
+            <div id="authContainer" class="auth-nav-item">
+                <button id="authBtn" class="nav-btn">
+                    <i class="fas fa-user-circle"></i>
+                    <span id="authText">Войти</span>
+                </button>
+            </div>
         </div>
     </nav>
 
@@ -600,9 +607,15 @@
                         <h3><i class="fas fa-key"></i> Код комнаты</h3>
                         <input type="text" id="roomCodeInput" class="room-input room-code-input" placeholder="Введите 6-значный код" maxlength="6">
                     </div>
-                    <div class="setting-group">
+                    <div id="playerBatchInput" class="setting-group">
                         <h3><i class="fas fa-user"></i> Ваше имя</h3>
                         <input type="text" id="playerNameInput" class="room-input" placeholder="Введите ваше имя" maxlength="30">
+                    </div>
+                    <div id="playerAuthInfo" class="setting-group" style="display:none;">
+                        <h3><i class="fas fa-user-check"></i> Вы вошли как</h3>
+                        <div class="user-badge glass-card">
+                            <i class="fas fa-user"></i> <span id="authPlayerName">Игрок</span>
+                        </div>
                     </div>
                     <div id="joinRoomInfo" class="join-room-info" style="display:none;">
                         <div class="room-found-card glass-card">
@@ -634,6 +647,62 @@
                     <p class="empty-state">Пока никто не играл в этой комнате.</p>
                 </div>
             </div>
+        </div>
+
+        <!-- Модальное окно Аутентификации -->
+        <div id="authModal" class="overlay" style="display: none;">
+            <div class="auth-container glass-card">
+                <button class="close-modal" onclick="document.getElementById('authModal').style.display='none'">
+                    <i class="fas fa-times"></i>
+                </button>
+                
+                <div id="authTabs" class="auth-tabs">
+                    <button id="tabLogin" class="auth-tab active">Вход</button>
+                    <button id="tabRegister" class="auth-tab">Регистрация</button>
+                </div>
+
+                <!-- Форма Входа -->
+                <div id="loginForm" class="auth-form-content">
+                    <h3>С возвращением!</h3>
+                    <div class="input-group">
+                        <i class="fas fa-envelope"></i>
+                        <input type="email" id="loginEmail" placeholder="Email" required>
+                    </div>
+                    <div class="input-group">
+                        <i class="fas fa-lock"></i>
+                        <input type="password" id="loginPassword" placeholder="Пароль" required>
+                    </div>
+                    <button id="btnDoLogin" class="historical-btn btn-xlarge">Войти</button>
+                    <p class="auth-switch">Забыли пароль? <a href="#" id="resetPassword">Сбросить</a></p>
+                </div>
+
+                <!-- Форма Регистрации -->
+                <div id="registerForm" class="auth-form-content" style="display: none;">
+                    <h3>Новый герой</h3>
+                    <div class="input-group">
+                        <i class="fas fa-user"></i>
+                        <input type="text" id="registerName" placeholder="Имя пользователя" required>
+                    </div>
+                    <div class="input-group">
+                        <i class="fas fa-envelope"></i>
+                        <input type="email" id="registerEmail" placeholder="Email" required>
+                    </div>
+                    <div class="input-group">
+                        <i class="fas fa-lock"></i>
+                        <input type="password" id="registerPassword" placeholder="Пароль (мин. 6 символы)" required>
+                    </div>
+                    <button id="btnDoRegister" class="historical-btn btn-xlarge">Создать аккаунт</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Профиль пользователя / Выход -->
+        <div id="userMenu" class="user-dropdown glass-card" style="display: none;">
+            <div class="user-menu-header">
+                <span id="userMenuName">Имя игрока</span>
+            </div>
+            <button id="btnMyStats" class="menu-item"><i class="fas fa-chart-bar"></i> Моя статистика</button>
+            <button id="btnLogOut" class="menu-item"><i class="fas fa-sign-out-alt"></i> Выйти</button>
         </div>
 
     </main>
