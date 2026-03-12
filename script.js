@@ -2968,21 +2968,26 @@ const game = {
 
     // Обновление статистики
     async updateStats() {
-        let stats = {};
-        
+        let stats = {
+            totalGames: 0,
+            totalTerritories: 0,
+            correctAnswers: 0,
+            totalQuestions: 0,
+            totalScore: 0
+        };
+
         if (this.user) {
-            // Загружаем из Firebase
+            // Загружаем только из Firebase
             try {
                 const snapshot = await db.ref(`users/${this.user.uid}/stats`).once('value');
-                stats = snapshot.val() || {};
+                if (snapshot.exists()) {
+                    stats = snapshot.val();
+                }
             } catch (e) {
                 console.error("Ошибка загрузки статистики из Firebase:", e);
-                stats = JSON.parse(localStorage.getItem('historyGameStats') || '{}');
             }
-        } else {
-            // Загружаем локально
-            stats = JSON.parse(localStorage.getItem('historyGameStats') || '{}');
         }
+        // Если пользователя нет (гость), stats останется с нулевыми значениями
 
         document.getElementById('totalGames').textContent = stats.totalGames || 0;
         document.getElementById('territoriesCaptured').textContent = stats.totalTerritories || 0;
@@ -2990,62 +2995,6 @@ const game = {
         const correctPercentage = stats.totalQuestions ?
             Math.round((stats.correctAnswers / stats.totalQuestions) * 100) : 0;
         document.getElementById('correctAnswers').textContent = `${correctPercentage}%`;
-    },
-
-    // Показать глобальную таблицу лидеров
-    async showLeaderboard() {
-        this.showScreen('leaderboardScreen');
-        const tbody = document.getElementById('globalLeaderboardBody');
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">Загрузка данных истории...</td></tr>';
-
-        try {
-            const snapshot = await db.ref('users').once('value');
-            const usersData = snapshot.val() || {};
-            
-            // Преобразуем в массив и фильтруем тех, у кого есть статистика
-            const leaderboard = Object.entries(usersData)
-                .map(([uid, data]) => ({
-                    uid,
-                    name: data.displayName || "Анонимный стратег",
-                    stats: data.stats || { totalGames: 0, totalTerritories: 0, correctAnswers: 0, totalQuestions: 0 }
-                }))
-                .filter(u => u.stats.totalGames > 0)
-                // Сортируем по количеству захваченных территорий (или можно по очкам)
-                .sort((a, b) => b.stats.totalTerritories - a.stats.totalTerritories);
-
-            tbody.innerHTML = '';
-            
-            if (leaderboard.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">История еще не знает своих героев. Будьте первым!</td></tr>';
-                return;
-            }
-
-            leaderboard.forEach((player, index) => {
-                const tr = document.createElement('tr');
-                tr.className = `rank-${index + 1}`;
-                
-                const accuracy = player.stats.totalQuestions ? 
-                    Math.round((player.stats.correctAnswers / player.stats.totalQuestions) * 100) : 0;
-
-                tr.innerHTML = `
-                    <td><span class="rank-badge">${index + 1}</span></td>
-                    <td>
-                        <div class="player-name-cell">
-                            <i class="fas fa-user-shield" style="color: var(--accent-gold); opacity: 0.7;"></i>
-                            <strong>${player.name}</strong>
-                        </div>
-                    </td>
-                    <td>${player.stats.totalGames}</td>
-                    <td><i class="fas fa-map-marked-alt" style="color: var(--accent-gold); margin-right: 5px;"></i> ${player.stats.totalTerritories}</td>
-                    <td><span class="accuracy-badge">${accuracy}%</span></td>
-                `;
-                tbody.appendChild(tr);
-            });
-
-        } catch (e) {
-            console.error("Leaderboard error:", e);
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--error-color);">Ошибка при получении летописей.</td></tr>';
-        }
     },
 
     // Начало игры
@@ -4001,24 +3950,35 @@ const game = {
 
     // Сохранение статистики
     async saveStatistics() {
-        const stats = JSON.parse(localStorage.getItem('historyGameStats') || '{}');
+        // Статистика сохраняется только для авторизованных пользователей
+        if (!this.user) {
+            console.log("Гостевая игра: статистика не сохраняется");
+            return;
+        }
 
-        stats.totalGames = (stats.totalGames || 0) + 1;
-        stats.totalTerritories = (stats.totalTerritories || 0) + this.state.capturedTerritories;
-        stats.correctAnswers = (stats.correctAnswers || 0) + this.state.correctAnswers;
-        stats.totalQuestions = (stats.totalQuestions || 0) + this.state.totalQuestions;
-        stats.totalScore = (stats.totalScore || 0) + this.state.score;
+        try {
+            // 1. Получаем текущую статистику из облака
+            const snapshot = await db.ref(`users/${this.user.uid}/stats`).once('value');
+            let stats = snapshot.val() || {
+                totalGames: 0,
+                totalTerritories: 0,
+                correctAnswers: 0,
+                totalQuestions: 0,
+                totalScore: 0
+            };
 
-        localStorage.setItem('historyGameStats', JSON.stringify(stats));
+            // 2. Инкрементируем значения данными текущей игры
+            stats.totalGames += 1;
+            stats.totalTerritories += this.state.capturedTerritories;
+            stats.correctAnswers += this.state.correctAnswers;
+            stats.totalQuestions += this.state.totalQuestions;
+            stats.totalScore += this.state.score;
 
-        // Если пользователь вошел, сохраняем также в Firebase
-        if (this.user) {
-            try {
-                await db.ref(`users/${this.user.uid}/stats`).set(stats);
-                console.log("Статистика сохранена в облаке");
-            } catch (e) {
-                console.error("Ошибка сохранения в Firebase:", e);
-            }
+            // 3. Сохраняем обратно в Firebase
+            await db.ref(`users/${this.user.uid}/stats`).set(stats);
+            console.log("Статистика аккаунта обновлена в Firebase");
+        } catch (e) {
+            console.error("Ошибка сохранения в Firebase:", e);
         }
     },
 
@@ -4867,10 +4827,6 @@ window.addEventListener('DOMContentLoaded', () => {
         document.getElementById('authSubtitle').textContent = isReg ? 'Присоединяйтесь к истории' : 'Войдите, чтобы сохранить прогресс';
         document.getElementById('authSubmitText').textContent = isReg ? 'Зарегистрироваться' : 'Войти';
         document.getElementById('authError').style.display = 'none';
-        
-        // Показываем/скрываем поле имени
-        document.getElementById('nameInputGroup').style.display = isReg ? 'block' : 'none';
-        document.getElementById('authName').required = isReg;
     }
 
     // Обработка формы
@@ -4878,22 +4834,14 @@ window.addEventListener('DOMContentLoaded', () => {
         e.preventDefault();
         const email = document.getElementById('authEmail').value;
         const password = document.getElementById('authPassword').value;
-        const name = document.getElementById('authName').value;
         const errorEl = document.getElementById('authError');
-        
+
         errorEl.style.display = 'none';
         document.getElementById('authSubmitBtn').disabled = true;
 
         try {
             if (isRegisterMode) {
-                const userCredential = await auth.createUserWithEmailAndPassword(email, password);
-                const user = userCredential.user;
-                
-                // Сохраняем имя в профиль Firebase
-                await user.updateProfile({ displayName: name });
-                
-                // Сохраняем имя в базу данных для админки/статистики
-                await db.ref(`users/${user.uid}/displayName`).set(name);
+                await auth.createUserWithEmailAndPassword(email, password);
             } else {
                 await auth.signInWithEmailAndPassword(email, password);
             }
@@ -4923,27 +4871,13 @@ window.addEventListener('DOMContentLoaded', () => {
         if (user) {
             loginBtn.style.display = 'none';
             userInfo.style.display = 'flex';
-            userNameEl.textContent = user.displayName || user.email.split('@')[0];
-            
-            // Если имя есть, но не в базе (для старых юзеров), пушим его
-            if (user.displayName) {
-                db.ref(`users/${user.uid}/displayName`).set(user.displayName);
-            }
-            
-            // Синхронизация: если есть локальная стата, пушим ее в облако при первом входе
-            const localStats = localStorage.getItem('historyGameStats');
-            if (localStats) {
-                const cloudSnapshot = await db.ref(`users/${user.uid}/stats`).once('value');
-                if (!cloudSnapshot.exists()) {
-                    await db.ref(`users/${user.uid}/stats`).set(JSON.parse(localStats));
-                    console.log("Локальная статистика синхронизирована с облаком");
-                }
-            }
+            userNameEl.textContent = user.email.split('@')[0];
         } else {
             loginBtn.style.display = 'flex';
             userInfo.style.display = 'none';
         }
-        
+
+
         // Обновляем статы в UI (подтянет из нужного места)
         game.updateStats();
     });
