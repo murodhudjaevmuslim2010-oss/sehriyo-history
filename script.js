@@ -2968,26 +2968,27 @@ const game = {
 
     // Обновление статистики
     async updateStats() {
-        let stats = {
-            totalGames: 0,
-            totalTerritories: 0,
-            correctAnswers: 0,
-            totalQuestions: 0,
-            totalScore: 0
-        };
+        let stats = {};
 
         if (this.user) {
-            // Загружаем только из Firebase
+            // Загружаем из Firebase
             try {
                 const snapshot = await db.ref(`users/${this.user.uid}/stats`).once('value');
-                if (snapshot.exists()) {
-                    stats = snapshot.val();
-                }
+                stats = snapshot.val() || { totalGames: 0, totalTerritories: 0, correctAnswers: 0, totalQuestions: 0, totalScore: 0 };
             } catch (e) {
                 console.error("Ошибка загрузки статистики из Firebase:", e);
+                stats = { totalGames: 0, totalTerritories: 0, correctAnswers: 0, totalQuestions: 0, totalScore: 0 };
             }
+        } else {
+            // Для гостей статистика всегда нулевая (согласно ТЗ)
+            stats = {
+                totalGames: 0,
+                totalTerritories: 0,
+                correctAnswers: 0,
+                totalQuestions: 0,
+                totalScore: 0
+            };
         }
-        // Если пользователя нет (гость), stats останется с нулевыми значениями
 
         document.getElementById('totalGames').textContent = stats.totalGames || 0;
         document.getElementById('territoriesCaptured').textContent = stats.totalTerritories || 0;
@@ -3948,37 +3949,42 @@ const game = {
         this.showScreen('resultsScreen');
     },
 
-    // Сохранение статистики
     async saveStatistics() {
-        // Статистика сохраняется только для авторизованных пользователей
-        if (!this.user) {
-            console.log("Гостевая игра: статистика не сохраняется");
-            return;
-        }
+        if (this.user) {
+            try {
+                // Прямое обновление в Firebase (Read-Modify-Write для сохранности данных между устройствами)
+                const snapshot = await db.ref(`users/${this.user.uid}/stats`).once('value');
+                const remoteStats = snapshot.val() || {
+                    totalGames: 0,
+                    totalTerritories: 0,
+                    correctAnswers: 0,
+                    totalQuestions: 0,
+                    totalScore: 0
+                };
 
-        try {
-            // 1. Получаем текущую статистику из облака
-            const snapshot = await db.ref(`users/${this.user.uid}/stats`).once('value');
-            let stats = snapshot.val() || {
-                totalGames: 0,
-                totalTerritories: 0,
-                correctAnswers: 0,
-                totalQuestions: 0,
-                totalScore: 0
-            };
+                remoteStats.totalGames += 1;
+                remoteStats.totalTerritories += this.state.capturedTerritories;
+                remoteStats.correctAnswers += this.state.correctAnswers;
+                remoteStats.totalQuestions += this.state.totalQuestions;
+                remoteStats.totalScore += this.state.score;
 
-            // 2. Инкрементируем значения данными текущей игры
-            stats.totalGames += 1;
-            stats.totalTerritories += this.state.capturedTerritories;
-            stats.correctAnswers += this.state.correctAnswers;
-            stats.totalQuestions += this.state.totalQuestions;
-            stats.totalScore += this.state.score;
-
-            // 3. Сохраняем обратно в Firebase
-            await db.ref(`users/${this.user.uid}/stats`).set(stats);
-            console.log("Статистика аккаунта обновлена в Firebase");
-        } catch (e) {
-            console.error("Ошибка сохранения в Firebase:", e);
+                await db.ref(`users/${this.user.uid}/stats`).set(remoteStats);
+                console.log("Статистика аккаунта синхронизирована с облаком Firebase");
+                
+                // Обновляем UI сразу
+                this.updateStats();
+            } catch (e) {
+                console.error("Ошибка сохранения в Firebase:", e);
+            }
+        } else {
+            // Для гостей сохраняем локально, но в меню они всё равно увидят 0 (по ТЗ)
+            const stats = JSON.parse(localStorage.getItem('historyGameStats') || '{}');
+            stats.totalGames = (stats.totalGames || 0) + 1;
+            stats.totalTerritories = (stats.totalTerritories || 0) + this.state.capturedTerritories;
+            stats.correctAnswers = (stats.correctAnswers || 0) + this.state.correctAnswers;
+            stats.totalQuestions = (stats.totalQuestions || 0) + this.state.totalQuestions;
+            stats.totalScore = (stats.totalScore || 0) + this.state.score;
+            localStorage.setItem('historyGameStats', JSON.stringify(stats));
         }
     },
 
@@ -4877,8 +4883,7 @@ window.addEventListener('DOMContentLoaded', () => {
             userInfo.style.display = 'none';
         }
 
-
-        // Обновляем статы в UI (подтянет из нужного места)
+        // Обновляем статы в UI (подтянет из облака для авторизованных, покажет 0 для гостей)
         game.updateStats();
     });
 });
