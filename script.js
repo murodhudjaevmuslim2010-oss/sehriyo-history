@@ -2971,23 +2971,26 @@ const game = {
         let stats = {};
 
         if (this.user) {
-            // Загружаем из Firebase
+            // Загружаем из Supabase
             try {
-                const snapshot = await db.ref(`users/${this.user.uid}/stats`).once('value');
-                stats = snapshot.val() || { totalGames: 0, totalTerritories: 0, correctAnswers: 0, totalQuestions: 0, totalScore: 0 };
+                const { data, error } = await supabase
+                    .from('stats')
+                    .select('data')
+                    .eq('user_id', this.user.id)
+                    .single();
+                    
+                if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows found
+                
+                stats = data ? data.data : {};
+                // Синхронизируем локально для оффлайн поддержки
+                localStorage.setItem('historyGameStats', JSON.stringify(stats));
             } catch (e) {
-                console.error("Ошибка загрузки статистики из Firebase:", e);
-                stats = { totalGames: 0, totalTerritories: 0, correctAnswers: 0, totalQuestions: 0, totalScore: 0 };
+                console.error("Ошибка загрузки статистики из Supabase:", e);
+                stats = JSON.parse(localStorage.getItem('historyGameStats') || '{}');
             }
         } else {
-            // Для гостей статистика всегда нулевая (согласно ТЗ)
-            stats = {
-                totalGames: 0,
-                totalTerritories: 0,
-                correctAnswers: 0,
-                totalQuestions: 0,
-                totalScore: 0
-            };
+            // Загружаем локально
+            stats = JSON.parse(localStorage.getItem('historyGameStats') || '{}');
         }
 
         document.getElementById('totalGames').textContent = stats.totalGames || 0;
@@ -3949,42 +3952,30 @@ const game = {
         this.showScreen('resultsScreen');
     },
 
+    // Сохранение статистики
     async saveStatistics() {
+        const stats = JSON.parse(localStorage.getItem('historyGameStats') || '{}');
+
+        stats.totalGames = (stats.totalGames || 0) + 1;
+        stats.totalTerritories = (stats.totalTerritories || 0) + this.state.capturedTerritories;
+        stats.correctAnswers = (stats.correctAnswers || 0) + this.state.correctAnswers;
+        stats.totalQuestions = (stats.totalQuestions || 0) + this.state.totalQuestions;
+        stats.totalScore = (stats.totalScore || 0) + this.state.score;
+
+        localStorage.setItem('historyGameStats', JSON.stringify(stats));
+
+        // Если пользователь вошел, сохраняем также в Supabase
         if (this.user) {
             try {
-                // Прямое обновление в Firebase (Read-Modify-Write для сохранности данных между устройствами)
-                const snapshot = await db.ref(`users/${this.user.uid}/stats`).once('value');
-                const remoteStats = snapshot.val() || {
-                    totalGames: 0,
-                    totalTerritories: 0,
-                    correctAnswers: 0,
-                    totalQuestions: 0,
-                    totalScore: 0
-                };
-
-                remoteStats.totalGames += 1;
-                remoteStats.totalTerritories += this.state.capturedTerritories;
-                remoteStats.correctAnswers += this.state.correctAnswers;
-                remoteStats.totalQuestions += this.state.totalQuestions;
-                remoteStats.totalScore += this.state.score;
-
-                await db.ref(`users/${this.user.uid}/stats`).set(remoteStats);
-                console.log("Статистика аккаунта синхронизирована с облаком Firebase");
+                const { error } = await supabase
+                    .from('stats')
+                    .upsert({ user_id: this.user.id, data: stats });
                 
-                // Обновляем UI сразу
-                this.updateStats();
+                if (error) throw error;
+                console.log("Статистика сохранена в облаке Supabase");
             } catch (e) {
-                console.error("Ошибка сохранения в Firebase:", e);
+                console.error("Ошибка сохранения в Supabase:", e);
             }
-        } else {
-            // Для гостей сохраняем локально, но в меню они всё равно увидят 0 (по ТЗ)
-            const stats = JSON.parse(localStorage.getItem('historyGameStats') || '{}');
-            stats.totalGames = (stats.totalGames || 0) + 1;
-            stats.totalTerritories = (stats.totalTerritories || 0) + this.state.capturedTerritories;
-            stats.correctAnswers = (stats.correctAnswers || 0) + this.state.correctAnswers;
-            stats.totalQuestions = (stats.totalQuestions || 0) + this.state.totalQuestions;
-            stats.totalScore = (stats.totalScore || 0) + this.state.score;
-            localStorage.setItem('historyGameStats', JSON.stringify(stats));
         }
     },
 
@@ -4422,25 +4413,14 @@ game.isAdjacentToOwned = function (territoryId, owner) {
 // Функция startPoliticalGame перенесена выше
 
 // ============================================
-// FIREBASE — ОНЛАЙН КОНФИГУРАЦИЯ
+// SUPABASE — ОНЛАЙН КОНФИГУРАЦИЯ
 // ============================================
-// ЗАМЕНИТЕ ЗНАЧЕНИЯ НА СВОИ из Firebase Console → Project Settings
-const firebaseConfig = {
-    apiKey: "AIzaSyCrUkX5HKTg_hT3ueT0HujoDeZ3HP9nPxU",
-    authDomain: "sehriyohistory.firebaseapp.com",
-    databaseURL: "https://sehriyohistory-default-rtdb.europe-west1.firebasedatabase.app",
-    projectId: "sehriyohistory",
-    storageBucket: "sehriyohistory.firebasestorage.app",
-    messagingSenderId: "929771205297",
-    appId: "1:929771205297:web:78256a6bdcd67ee2bda890"
-};
+// ЗАМЕНИТЕ НА СВОИ КЛЮЧИ ИЗ SUPABASE (Project Settings -> API)
+const SUPABASE_URL = 'https://tabummxzzmulzzrqvxfr.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRhYnVtbXh6em11bHp6cnF2eGZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM3NjEwMjksImV4cCI6MjA4OTMzNzAyOX0.vYkpeEQ8HqxEAOtyPWTG_DQgEAi_bIuyTVW3dpXIObw';
 
-// Инициализация Firebase (только если не инициализирован)
-if (!firebase.apps.length) {
-    firebase.initializeApp(firebaseConfig);
-}
-const db = firebase.database();
-const auth = firebase.auth();
+// Инициализация Supabase
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // Состояние пользователя
 game.user = null;
@@ -4541,11 +4521,12 @@ game._hideLoading = function (btnId) {
     if (btn && btn._origText) { btn.innerHTML = btn._origText; btn.disabled = false; }
 };
 
-// Создание комнаты (Firebase)
+// Создание комнаты (Supabase)
 game.createRoom = async function () {
     const name = document.getElementById('roomNameInput').value.trim();
     if (!name) { alert('Введите название комнаты!'); return; }
     if (this._pendingRoomQuestions.length < 5) { alert('Добавьте минимум 5 вопросов!'); return; }
+    if (!this.user) { alert('Нужно авторизоваться!'); return; }
 
     this._showLoading('createRoomBtn', 'Создаём...');
     try {
@@ -4554,11 +4535,12 @@ game.createRoom = async function () {
             name: name,
             code: code,
             questions: [...this._pendingRoomQuestions],
-            createdAt: new Date().toISOString()
+            created_by: this.user.id
         };
 
-        // Сохраняем в Firebase
-        await db.ref('rooms').push(room);
+        // Сохраняем в Supabase
+        const { error } = await supabase.from('rooms').insert([room]);
+        if (error) throw error;
 
         // Очищаем форму
         this._pendingRoomQuestions = [];
@@ -4571,23 +4553,34 @@ game.createRoom = async function () {
         this.showScreen('myRoomsScreen');
     } catch (e) {
         this._hideLoading('createRoomBtn');
-        alert('Ошибка создания комнаты: ' + e.message + '\nПроверьте настройки Firebase.');
+        alert('Ошибка создания комнаты: ' + e.message + '\nПроверьте настройки Supabase.');
         console.error(e);
     }
 };
 
-// Отрисовка списка моих комнат (Firebase)
+// Отрисовка списка моих комнат (Supabase)
 game.renderMyRooms = async function () {
     const container = document.getElementById('myRoomsList');
     container.innerHTML = '<p class="empty-state"><i class="fas fa-spinner fa-spin"></i> Загрузка...</p>';
+    
+    if (!this.user) {
+        container.innerHTML = '<p class="empty-state">Войдите в аккаунт, чтобы управлять комнатами.</p>';
+        return;
+    }
+
     try {
-        const snap = await db.ref('rooms').get();
-        if (!snap.exists()) {
+        const { data: rooms, error } = await supabase
+            .from('rooms')
+            .select('*, room_leaderboards(count)')
+            .eq('created_by', this.user.id)
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        if (!rooms || rooms.length === 0) {
             container.innerHTML = '<p class="empty-state">У вас пока нет комнат. Создайте первую!</p>';
             return;
         }
-        const rooms = [];
-        snap.forEach(child => rooms.push({ id: child.key, ...child.val() }));
 
         container.innerHTML = rooms.map((room, idx) => `
             <div class="room-card" style="animation-delay: ${idx * 0.08}s">
@@ -4599,8 +4592,8 @@ game.renderMyRooms = async function () {
                 </div>
                 <div class="room-card-meta">
                     <span><i class="fas fa-question-circle"></i> ${(room.questions || []).length} вопросов</span>
-                    <span><i class="fas fa-users"></i> ${room.leaderboard ? Object.keys(room.leaderboard).length : 0} игроков</span>
-                    <span><i class="fas fa-calendar"></i> ${new Date(room.createdAt).toLocaleDateString('ru-RU')}</span>
+                    <span><i class="fas fa-users"></i> ${room.room_leaderboards[0].count} игроков</span>
+                    <span><i class="fas fa-calendar"></i> ${new Date(room.created_at).toLocaleDateString('ru-RU')}</span>
                 </div>
                 <div class="room-card-actions">
                     <button class="historical-btn" onclick="game.showRoomLeaderboard('${room.id}')">
@@ -4618,54 +4611,65 @@ game.renderMyRooms = async function () {
     }
 };
 
-// Удаление комнаты (Firebase)
+// Удаление комнаты (Supabase)
 game.deleteRoom = async function (roomId) {
     if (!confirm('Вы уверены что хотите удалить эту комнату?')) return;
     try {
-        await db.ref('rooms/' + roomId).remove();
+        const { error } = await supabase.from('rooms').delete().eq('id', roomId);
+        if (error) throw error;
         this.renderMyRooms();
     } catch (e) {
         alert('Ошибка удаления: ' + e.message);
     }
 };
 
-// Показать лидерборд комнаты (Firebase)
+// Показать лидерборд комнаты (Supabase)
 game.showRoomLeaderboard = async function (roomId) {
     const container = document.getElementById('leaderboardTable');
     container.innerHTML = '<p class="empty-state"><i class="fas fa-spinner fa-spin"></i> Загрузка...</p>';
     this.showScreen('roomLeaderboardScreen');
 
     try {
-        const snap = await db.ref('rooms/' + roomId).get();
-        if (!snap.exists()) { container.innerHTML = '<p class="empty-state">Комната не найдена.</p>'; return; }
-        const room = { id: snap.key, ...snap.val() };
+        const { data: room, error: roomError } = await supabase
+            .from('rooms')
+            .select('name, code')
+            .eq('id', roomId)
+            .single();
+
+        if (roomError || !room) { 
+            container.innerHTML = '<p class="empty-state">Комната не найдена.</p>'; 
+            return; 
+        }
 
         document.getElementById('lbRoomName').textContent = room.name;
         document.getElementById('lbRoomCode').textContent = room.code;
 
-        if (!room.leaderboard) {
+        const { data: leaderboards, error: lbError } = await supabase
+            .from('room_leaderboards')
+            .select('*')
+            .eq('room_id', roomId)
+            .order('score', { ascending: false });
+
+        if (lbError || !leaderboards || leaderboards.length === 0) {
             container.innerHTML = '<p class="empty-state">Пока никто не играл в этой комнате.</p>';
             return;
         }
-
-        const entries = Object.values(room.leaderboard);
-        const sorted = entries.sort((a, b) => b.score - a.score);
 
         let html = `
             <div class="leaderboard-row header">
                 <span>#</span><span>Имя</span><span>Очки</span><span>Ответы</span><span>Дата</span>
             </div>
         `;
-        sorted.forEach((entry, i) => {
+        leaderboards.forEach((entry, i) => {
             const rankClass = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
             const rankIcon = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1);
             html += `
                 <div class="leaderboard-row">
                     <span class="lb-rank ${rankClass}">${rankIcon}</span>
-                    <span class="lb-name">${entry.name}</span>
+                    <span class="lb-name">${entry.player_name}</span>
                     <span class="lb-score">${entry.score}</span>
                     <span class="lb-correct">${entry.correct}/${entry.total}</span>
-                    <span class="lb-date">${new Date(entry.date).toLocaleDateString('ru-RU')}</span>
+                    <span class="lb-date">${new Date(entry.created_at).toLocaleDateString('ru-RU')}</span>
                 </div>
             `;
         });
@@ -4676,13 +4680,16 @@ game.showRoomLeaderboard = async function (roomId) {
     }
 };
 
-// Поиск комнаты по коду (Firebase — запрос по полю)
+// Поиск комнаты по коду (Supabase)
 game.findRoomByCode = async function (code) {
-    const snap = await db.ref('rooms').orderByChild('code').equalTo(code.toUpperCase()).get();
-    if (!snap.exists()) return null;
-    let room = null;
-    snap.forEach(child => { room = { id: child.key, ...child.val() }; });
-    return room;
+    const { data, error } = await supabase
+        .from('rooms')
+        .select('*')
+        .eq('code', code.toUpperCase())
+        .single();
+        
+    if (error || !data) return null;
+    return data;
 };
 
 // Проверка кода комнаты в реальном времени (Firebase)
@@ -4752,17 +4759,17 @@ game.startRoomGame = function (room, playerName) {
     document.getElementById('timer').textContent = '--';
 };
 
-// Сохранение результата игры в лидерборд комнаты (Firebase)
+// Сохранение результата игры в лидерборд комнаты (Supabase)
 game.saveRoomResult = async function (roomId, playerName, score, correct, total) {
     if (!roomId) return;
     try {
-        await db.ref('rooms/' + roomId + '/leaderboard').push({
-            name: playerName,
+        await supabase.from('room_leaderboards').insert([{
+            room_id: roomId,
+            player_name: playerName,
             score: score,
             correct: correct,
-            total: total,
-            date: new Date().toISOString()
-        });
+            total: total
+        }]);
     } catch (e) {
         console.error('Ошибка сохранения результата:', e);
     }
@@ -4846,11 +4853,15 @@ window.addEventListener('DOMContentLoaded', () => {
         document.getElementById('authSubmitBtn').disabled = true;
 
         try {
+            let authResponse;
             if (isRegisterMode) {
-                await auth.createUserWithEmailAndPassword(email, password);
+                authResponse = await supabase.auth.signUp({ email, password });
             } else {
-                await auth.signInWithEmailAndPassword(email, password);
+                authResponse = await supabase.auth.signInWithPassword({ email, password });
             }
+            
+            if (authResponse.error) throw authResponse.error;
+            
             authModal.style.display = 'none';
             authForm.reset();
         } catch (error) {
@@ -4863,12 +4874,13 @@ window.addEventListener('DOMContentLoaded', () => {
     });
 
     // Выход
-    document.getElementById('logoutBtn')?.addEventListener('click', () => {
-        auth.signOut();
+    document.getElementById('logoutBtn')?.addEventListener('click', async () => {
+        await supabase.auth.signOut();
     });
 
     // Слушатель состояния
-    auth.onAuthStateChanged(async (user) => {
+    supabase.auth.onAuthStateChange(async (event, session) => {
+        const user = session?.user || null;
         game.user = user;
         const loginBtn = document.getElementById('loginBtn');
         const userInfo = document.getElementById('userInfo');
@@ -4878,12 +4890,34 @@ window.addEventListener('DOMContentLoaded', () => {
             loginBtn.style.display = 'none';
             userInfo.style.display = 'flex';
             userNameEl.textContent = user.email.split('@')[0];
+
+            // Синхронизация: если есть локальная стата, пушим ее в облако при первом входе/регистрации
+            const localStats = localStorage.getItem('historyGameStats');
+            if (localStats) {
+                try {
+                    const { data, error } = await supabase
+                        .from('stats')
+                        .select('data')
+                        .eq('user_id', user.id)
+                        .single();
+
+                    if (error && error.code === 'PGRST116') {
+                        // Нет существующей статистики, сохраняем локальную
+                        await supabase
+                            .from('stats')
+                            .insert({ user_id: user.id, data: JSON.parse(localStats) });
+                        console.log("Локальная статистика синхронизирована с облаком Supabase");
+                    }
+                } catch (e) {
+                    console.error("Ошибка при первоначальной синхронизации:", e);
+                }
+            }
         } else {
             loginBtn.style.display = 'flex';
             userInfo.style.display = 'none';
         }
 
-        // Обновляем статы в UI (подтянет из облака для авторизованных, покажет 0 для гостей)
+        // Обновляем статы в UI (подтянет из нужного места)
         game.updateStats();
     });
 });
