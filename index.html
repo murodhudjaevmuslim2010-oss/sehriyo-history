@@ -42,18 +42,6 @@
             <button id="soundToggle" class="nav-btn">
                 <i class="fas fa-volume-up"></i>
             </button>
-            <div id="authContainer" class="auth-nav">
-                <button id="loginBtn" class="nav-btn highlight-btn">
-                    <i class="fas fa-sign-in-alt"></i>
-                    <span id="login-text">Вход</span>
-                </button>
-                <div id="userInfo" class="user-info-brief" style="display: none;">
-                    <span id="userDisplayName" class="user-name"></span>
-                    <button id="logoutBtn" class="nav-btn small-btn" title="Выйти">
-                        <i class="fas fa-sign-out-alt"></i>
-                    </button>
-                </div>
-            </div>
         </div>
     </nav>
 
@@ -644,42 +632,6 @@
                 <div id="leaderboardTable" class="leaderboard-container">
                     <p class="empty-state">Пока никто не играл в этой комнате.</p>
                 </div>
-            </div>
-        </div>
-
-        <!-- Модальное окно Аутентификации -->
-        <div id="authModal" class="overlay" style="display: none;">
-            <div class="auth-container glass-card">
-                <button class="close-modal" onclick="document.getElementById('authModal').style.display='none'">
-                    <i class="fas fa-times"></i>
-                </button>
-                
-                <div class="auth-tabs">
-                    <button id="tabLogin" class="auth-tab active">Вход</button>
-                    <button id="tabRegister" class="auth-tab">Регистрация</button>
-                </div>
-
-                <form id="authForm" class="auth-form">
-                    <h2 id="authTitle">С возвращением!</h2>
-                    <p id="authSubtitle">Войдите, чтобы сохранить свой прогресс</p>
-                    
-                    <div class="input-group">
-                        <i class="fas fa-envelope"></i>
-                        <input type="email" id="authEmail" placeholder="Email" required>
-                    </div>
-                    
-                    <div class="input-group">
-                        <i class="fas fa-lock"></i>
-                        <input type="password" id="authPassword" placeholder="Пароль" required>
-                    </div>
-
-                    <div id="authError" class="auth-error" style="display: none;"></div>
-                    
-                    <button type="submit" id="authSubmitBtn" class="historical-btn btn-large">
-                        <span id="authSubmitText">Войти</span>
-                        <i class="fas fa-arrow-right"></i>
-                    </button>
-                </form>
             </div>
         </div>
 
