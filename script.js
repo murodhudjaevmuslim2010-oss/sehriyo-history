@@ -3949,20 +3949,20 @@ const game = {
 
         stats.totalGames = (stats.totalGames || 0) + 1;
         stats.totalTerritories = (stats.totalTerritories || 0) + this.state.capturedTerritories;
-        stats.correctAnswers = (stats.correctAnswers || 0) + this.state.correctAnswers;
+        stats.correctAnswersTotal = (stats.correctAnswersTotal || 0) + this.state.correctAnswers;
         stats.totalQuestions = (stats.totalQuestions || 0) + this.state.totalQuestions;
-        stats.totalScore = (stats.totalScore || 0) + this.state.score;
+        stats.score = (stats.score || 0) + this.state.score;
+        
+        // Пересчитываем процент правильных (строка для UI)
+        stats.correctAnswers = stats.totalQuestions > 0 ? 
+            Math.round((stats.correctAnswersTotal / stats.totalQuestions) * 100) + "%" : "0%";
 
         localStorage.setItem('historyGameStats', JSON.stringify(stats));
+        this.updateStats();
 
-        // Если пользователь вошел, сохраняем также в Firebase
+        // Если пользователь вошел, синхронизируем с Supabase
         if (this.user) {
-            try {
-                await db.ref(`users/${this.user.uid}/stats`).set(stats);
-                console.log("Статистика сохранена в облаке");
-            } catch (e) {
-                console.error("Ошибка сохранения в Firebase:", e);
-            }
+            await this.syncStats();
         }
     },
 
@@ -4768,14 +4768,20 @@ game.syncStats = async function () {
     const localStats = JSON.parse(localStorage.getItem('historyGameStats') || '{}');
     if (!localStats.totalGames) return;
 
+    // Считаем % правильных ответов
+    let percent = 0;
+    if (localStats.totalQuestions > 0) {
+        percent = (localStats.correctAnswersTotal / localStats.totalQuestions) * 100;
+    }
+
     try {
         const { error } = await supabaseClient
             .from('user_stats')
             .upsert({
                 user_id: this.user.id,
                 total_games: localStats.totalGames,
-                territories_captured: localStats.territoriesCaptured,
-                correct_answers_percent: parseFloat(localStats.correctAnswers),
+                territories_captured: localStats.totalTerritories,
+                correct_answers_percent: percent,
                 total_score: localStats.score,
                 updated_at: new Date().toISOString()
             });
@@ -4785,6 +4791,21 @@ game.syncStats = async function () {
     } catch (e) {
         console.error("Ошибка синхронизации статов:", e);
     }
+};
+
+// Обновление статистики в UI (на главном экране)
+game.updateStats = function () {
+    const stats = JSON.parse(localStorage.getItem('historyGameStats') || '{}');
+    
+    const elements = {
+        totalGames: document.getElementById('totalGames'),
+        territoriesCaptured: document.getElementById('territoriesCaptured'),
+        correctAnswers: document.getElementById('correctAnswers')
+    };
+
+    if (elements.totalGames) elements.totalGames.textContent = stats.totalGames || 0;
+    if (elements.territoriesCaptured) elements.territoriesCaptured.textContent = stats.totalTerritories || 0;
+    if (elements.correctAnswers) elements.correctAnswers.textContent = stats.correctAnswers || "0%";
 };
 
 // Загрузка статистики из Supabase
@@ -4797,17 +4818,18 @@ game.loadStatsFromCloud = async function () {
             .eq('user_id', this.user.id)
             .single();
             
-        if (error && error.code !== 'PGRST116') throw error; // PGRST116 is "no rows returned"
+        if (error && error.code !== 'PGRST116') throw error; 
 
         if (data) {
             const cloudStats = {
                 totalGames: data.total_games,
-                territoriesCaptured: data.territories_captured,
-                correctAnswers: data.correct_answers_percent + "%",
+                totalTerritories: data.territories_captured,
+                correctAnswers: Math.round(data.correct_answers_percent) + "%",
+                correctAnswersTotal: Math.round((data.correct_answers_percent / 100) * data.total_games * 20), // Приблизительно, если нет точных данных
+                totalQuestions: data.total_games * 20, // Предполагаем среднее
                 score: data.total_score
             };
             localStorage.setItem('historyGameStats', JSON.stringify(cloudStats));
-            this.updateStats();
         }
     } catch (e) {
         console.error("Ошибка загрузки статов:", e);
