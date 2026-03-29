@@ -4405,7 +4405,7 @@ game.isAdjacentToOwned = function (territoryId, owner) {
 const SUPABASE_URL = "https://tabummxzzmulzzrqvxfr.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRhYnVtbXh6em11bHp6cnF2eGZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM3NjEwMjksImV4cCI6MjA4OTMzNzAyOX0.vYkpeEQ8HqxEAOtyPWTG_DQgEAi_bIuyTVW3dpXIObw";
 
-const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // Состояние пользователя
 game.user = null;
@@ -4518,7 +4518,7 @@ game.createRoom = async function () {
     try {
         const code = this.generateRoomCode();
         
-        const { error } = await supabase.from('rooms').insert([{
+        const { error } = await supabaseClient.from('rooms').insert([{
             name: name,
             code: code,
             questions: [...this._pendingRoomQuestions],
@@ -4554,7 +4554,7 @@ game.renderMyRooms = async function () {
     }
 
     try {
-        const { data: rooms, error } = await supabase
+        const { data: rooms, error } = await supabaseClient
             .from('rooms')
             .select(`
                 *,
@@ -4603,7 +4603,7 @@ game.renderMyRooms = async function () {
 game.deleteRoom = async function (roomId) {
     if (!confirm('Вы уверены что хотите удалить эту комнату?')) return;
     try {
-        const { error } = await supabase
+        const { error } = await supabaseClient
             .from('rooms')
             .delete()
             .eq('id', roomId);
@@ -4623,7 +4623,7 @@ game.showRoomLeaderboard = async function (roomId) {
 
     try {
         // Получаем инфо о комнате
-        const { data: room, error: roomError } = await supabase
+        const { data: room, error: roomError } = await supabaseClient
             .from('rooms')
             .select('*')
             .eq('id', roomId)
@@ -4635,7 +4635,7 @@ game.showRoomLeaderboard = async function (roomId) {
         document.getElementById('lbRoomCode').textContent = room.code;
 
         // Получаем лидерборд
-        const { data: leaders, error: leadError } = await supabase
+        const { data: leaders, error: leadError } = await supabaseClient
             .from('room_leaderboard')
             .select('*')
             .eq('room_id', roomId)
@@ -4675,7 +4675,7 @@ game.showRoomLeaderboard = async function (roomId) {
 
 // Поиск комнаты по коду (Supabase)
 game.findRoomByCode = async function (code) {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
         .from('rooms')
         .select('*')
         .eq('code', code.toUpperCase())
@@ -4748,7 +4748,7 @@ game.startRoomGame = function (room, playerName) {
 game.saveRoomResult = async function (roomId, playerName, score, correct, total) {
     if (!roomId) return;
     try {
-        await supabase.from('room_leaderboard').insert([{
+        await supabaseClient.from('room_leaderboard').insert([{
             room_id: roomId,
             player_name: playerName,
             score: score,
@@ -4769,7 +4769,7 @@ game.syncStats = async function () {
     if (!localStats.totalGames) return;
 
     try {
-        const { error } = await supabase
+        const { error } = await supabaseClient
             .from('user_stats')
             .upsert({
                 user_id: this.user.id,
@@ -4791,7 +4791,7 @@ game.syncStats = async function () {
 game.loadStatsFromCloud = async function () {
     if (!this.user) return;
     try {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseClient
             .from('user_stats')
             .select('*')
             .eq('user_id', this.user.id)
@@ -4886,7 +4886,7 @@ window.addEventListener('DOMContentLoaded', () => {
             if (isRegisterMode) {
                 if (!name) throw new Error("Введите имя");
                 
-                const { data, error } = await supabase.auth.signUp({ 
+                const { data, error } = await supabaseClient.auth.signUp({ 
                     email, 
                     password,
                     options: { data: { full_name: name, class: userClass } }
@@ -4895,7 +4895,7 @@ window.addEventListener('DOMContentLoaded', () => {
                 if (error) throw error;
                 if (data.user) {
                     // Создаем профиль в таблице profiles
-                    await supabase.from('profiles').insert([{
+                    await supabaseClient.from('profiles').insert([{
                         id: data.user.id,
                         name: name,
                         class: userClass,
@@ -4903,11 +4903,11 @@ window.addEventListener('DOMContentLoaded', () => {
                     }]);
                     
                     // Создаем начальные статы
-                    await supabase.from('user_stats').insert([{ user_id: data.user.id }]);
+                    await supabaseClient.from('user_stats').insert([{ user_id: data.user.id }]);
                 }
                 alert("Успешная регистрация! Проверьте email (если включено подтверждение) или просто войдите.");
             } else {
-                const { error } = await supabase.auth.signInWithPassword({ email, password });
+                const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
                 if (error) throw error;
             }
             authModal.style.display = 'none';
@@ -4921,10 +4921,10 @@ window.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    document.getElementById('logoutBtn')?.addEventListener('click', () => supabase.auth.signOut());
+    document.getElementById('logoutBtn')?.addEventListener('click', () => supabaseClient.auth.signOut());
 
     // Слушатель Auth
-    supabase.auth.onAuthStateChange(async (event, session) => {
+    supabaseClient.auth.onAuthStateChange(async (event, session) => {
         const user = session?.user || null;
         game.user = user;
         
@@ -4937,7 +4937,7 @@ window.addEventListener('DOMContentLoaded', () => {
             userInfo.style.display = 'flex';
             
             // Получаем профиль
-            const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+            const { data: profile } = await supabaseClient.from('profiles').select('*').eq('id', user.id).single();
             game.userProfile = profile;
             
             userNameEl.textContent = profile?.name || user.user_metadata?.full_name || user.email.split('@')[0];
