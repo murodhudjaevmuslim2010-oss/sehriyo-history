@@ -1,32 +1,61 @@
--- Schema for 2history Supabase Integration
+-- Schema for 2history Supabase Integration (Full Cloud Logic)
 
--- 1. Create table for Teacher Rooms
-CREATE TABLE public.teacher_rooms (
+-- 1. Create table for User Profiles
+CREATE TABLE IF NOT EXISTS public.profiles (
+    id UUID REFERENCES auth.users ON DELETE CASCADE PRIMARY KEY,
+    name TEXT,
+    class TEXT,
+    email TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 2. Create table for User Statistics (aggregated totals)
+CREATE TABLE IF NOT EXISTS public.user_stats (
+    user_id UUID REFERENCES auth.users ON DELETE CASCADE PRIMARY KEY,
+    total_games INTEGER DEFAULT 0,
+    territories_captured INTEGER DEFAULT 0,
+    correct_answers_percent FLOAT DEFAULT 0,
+    total_score INTEGER DEFAULT 0,
+    -- Per-mode stats
+    single_games INTEGER DEFAULT 0,
+    single_score INTEGER DEFAULT 0,
+    single_territories INTEGER DEFAULT 0,
+    political_games INTEGER DEFAULT 0,
+    political_score INTEGER DEFAULT 0,
+    political_territories INTEGER DEFAULT 0,
+    online_games INTEGER DEFAULT 0,
+    online_score INTEGER DEFAULT 0,
+    online_territories INTEGER DEFAULT 0,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 3. Create table for Game Results (per-game records, used for leaderboards)
+CREATE TABLE IF NOT EXISTS public.game_results (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    user_id UUID REFERENCES auth.users ON DELETE CASCADE NOT NULL,
+    player_name TEXT NOT NULL,
+    game_mode TEXT NOT NULL CHECK (game_mode IN ('single', 'political', 'online')),
+    score INTEGER NOT NULL DEFAULT 0,
+    territories_captured INTEGER NOT NULL DEFAULT 0,
+    correct_answers INTEGER NOT NULL DEFAULT 0,
+    total_questions INTEGER NOT NULL DEFAULT 0
+);
+
+-- 4. Create table for Teacher Rooms
+CREATE TABLE IF NOT EXISTS public.teacher_rooms (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     room_code TEXT UNIQUE NOT NULL,
     room_name TEXT NOT NULL,
-    creator_id UUID -- Reference to auth.users if auth is used, otherwise can be tracked via localStorage anonymous ID
+    owner_id UUID REFERENCES auth.users ON DELETE CASCADE NOT NULL
 );
 
--- 2. Create table for Questions linked to a Teacher Room
-CREATE TABLE public.room_questions (
+-- 5. Create table for Room Leaderboards (Player scores in rooms)
+CREATE TABLE IF NOT EXISTS public.leaderboards (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     room_id UUID REFERENCES public.teacher_rooms(id) ON DELETE CASCADE NOT NULL,
-    question_text TEXT NOT NULL,
-    answer_correct TEXT NOT NULL,
-    answer_wrong1 TEXT NOT NULL,
-    answer_wrong2 TEXT NOT NULL,
-    answer_wrong3 TEXT NOT NULL,
-    explanation TEXT
-);
-
--- 3. Create table for Leaderboards (Scores)
-CREATE TABLE public.leaderboards (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
-    room_id UUID REFERENCES public.teacher_rooms(id) ON DELETE CASCADE,
     player_name TEXT NOT NULL,
     score INTEGER NOT NULL,
     correct_answers INTEGER NOT NULL,
@@ -34,82 +63,44 @@ CREATE TABLE public.leaderboards (
     captured_territories INTEGER NOT NULL
 );
 
--- Optional: Enable Row Level Security (RLS) if you want to restrict access
--- For a simple implementation, you can make these tables readable/writable by anyone (Anon).
--- Run these commands to allow anonymous access (only if RLS is enabled):
-
+-- Enable Row Level Security (RLS)
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_stats ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.teacher_rooms ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.room_questions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.leaderboards ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.game_results ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Enable read access for all users" ON public.teacher_rooms FOR SELECT USING (true);
-CREATE POLICY "Enable insert for all users" ON public.teacher_rooms FOR INSERT WITH CHECK (true);
+-- 6. ACCESS POLICIES
 
-CREATE POLICY "Enable read access for all users" ON public.room_questions FOR SELECT USING (true);
-CREATE POLICY "Enable insert for all users" ON public.room_questions FOR INSERT WITH CHECK (true);
+-- Profiles: Users can manage ONLY their own profile
+CREATE POLICY "Users can view own profile" ON public.profiles FOR SELECT USING (auth.uid() = id);
+CREATE POLICY "Users can update own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id);
+CREATE POLICY "Users can insert own profile" ON public.profiles FOR INSERT WITH CHECK (auth.uid() = id);
 
-CREATE POLICY "Enable read access for all users" ON public.leaderboards FOR SELECT USING (true);
-CREATE POLICY "Enable insert for all users" ON public.leaderboards FOR INSERT WITH CHECK (true);
+-- Stats: Users can manage ONLY their own stats
+CREATE POLICY "Users can view own stats" ON public.user_stats FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can update own stats" ON public.user_stats FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert own stats" ON public.user_stats FOR INSERT WITH CHECK (auth.uid() = user_id);
 
--- 4. Create table for Platform-wide Global Statistics
-CREATE TABLE public.global_stats (
+-- Game Results: Anyone can read (for leaderboards), only owner can insert their own
+CREATE POLICY "Anyone can read game results" ON public.game_results FOR SELECT USING (true);
+CREATE POLICY "Users can insert own results" ON public.game_results FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+-- Teacher Rooms: Anyone can view, only owners can manage
+CREATE POLICY "Enable read access for all rooms" ON public.teacher_rooms FOR SELECT USING (true);
+CREATE POLICY "Enable individual room management" ON public.teacher_rooms FOR ALL USING (auth.uid() = owner_id);
+
+-- Leaderboards: Anyone can read and add (insert) scores
+CREATE POLICY "Enable read access for all leaderboards" ON public.leaderboards FOR SELECT USING (true);
+CREATE POLICY "Enable score insertion for all" ON public.leaderboards FOR INSERT WITH CHECK (true);
+
+-- 7. GLOBAL STATS (Optional, aggregated from user_stats)
+CREATE TABLE IF NOT EXISTS public.global_stats (
     id INTEGER PRIMARY KEY DEFAULT 1,
     total_games INTEGER DEFAULT 0,
     total_territories INTEGER DEFAULT 0,
-    total_questions INTEGER DEFAULT 0,
-    correct_answers INTEGER DEFAULT 0
+    correct_answers_avg FLOAT DEFAULT 0
 );
-
--- Initialize with one row
 INSERT INTO public.global_stats (id) VALUES (1) ON CONFLICT DO NOTHING;
-
--- 5. Create table for Player Statistics (anonymous)
-CREATE TABLE public.player_stats (
-    player_id UUID PRIMARY KEY,
-    total_games INTEGER DEFAULT 0,
-    total_territories INTEGER DEFAULT 0,
-    total_questions INTEGER DEFAULT 0,
-    correct_answers INTEGER DEFAULT 0,
-    total_score INTEGER DEFAULT 0,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
 ALTER TABLE public.global_stats ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.player_stats ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Enable read access for all users" ON public.global_stats FOR SELECT USING (true);
-CREATE POLICY "Enable update for all users" ON public.global_stats FOR UPDATE USING (true);
-
-CREATE POLICY "Enable read access for all users" ON public.player_stats FOR SELECT USING (true);
-CREATE POLICY "Enable insert for all users" ON public.player_stats FOR INSERT WITH CHECK (true);
-CREATE POLICY "Enable update for all users" ON public.player_stats FOR UPDATE USING (true);
-
--- 6. Function to atomically increment global and player stats
-CREATE OR REPLACE FUNCTION increment_game_stats(
-    p_player_id UUID,
-    p_games INTEGER,
-    p_territories INTEGER,
-    p_questions INTEGER,
-    p_correct INTEGER,
-    p_score INTEGER
-) RETURNS void AS $$
-BEGIN
-    -- Update or insert player stats
-    INSERT INTO public.player_stats (player_id, total_games, total_territories, total_questions, correct_answers, total_score)
-    VALUES (p_player_id, p_games, p_territories, p_questions, p_correct, p_score)
-    ON CONFLICT (player_id) DO UPDATE SET
-        total_games = player_stats.total_games + p_games,
-        total_territories = player_stats.total_territories + p_territories,
-        total_questions = player_stats.total_questions + p_questions,
-        correct_answers = player_stats.correct_answers + p_correct,
-        total_score = player_stats.total_score + p_score,
-        updated_at = NOW();
-
-    -- Update global stats (id = 1)
-    UPDATE public.global_stats SET
-        total_games = global_stats.total_games + p_games,
-        total_territories = global_stats.total_territories + p_territories,
-        total_questions = global_stats.total_questions + p_questions,
-        correct_answers = global_stats.correct_answers + p_correct;
-END;
-$$ LANGUAGE plpgsql;
+CREATE POLICY "Enable read for all" ON public.global_stats FOR SELECT USING (true);

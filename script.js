@@ -37,7 +37,11 @@ const game = {
                 coal: 0,
                 iron: 0,
                 oil: 0,
-                gold: 0
+                gold: 0,
+                food: 0,
+                leather: 0,
+                manpower: 0,
+                coins: 200
             },
             stars: 100, // Starting stars
             productionTimer: null,
@@ -47,9 +51,47 @@ const game = {
             revoltCountdown: 90,
             territoryNeighbors: {}, // Map of territory ID to array of neighbor IDs
             territoryResources: {}, // Map of territory ID to resource type
-            botCountries: [] // Array of active bot controller objects
-        }
+            botCountries: [], // Array of active bot controller objects
+            army: {
+                soldier: 0,
+                tank: 0,
+                fighter: 0,
+                bomber: 0,
+                at_gun: 0,
+                howitzer: 0,
+                sniper: 0,
+                medic: 0,
+                vdv: 0,
+                btr: 0,
+                carrier: 0
+            },
+            modernization: ['soldier', 'at_gun', 'howitzer', 'tank', 'fighter', 'bomber'], // Default units
+            productionQueue: [], // Array of { unitId: 'tank', turnsLeft: 3 }
+            goldDebtTurns: 0, // Счетчик ходов без золота
+            tradeOrders: [] // Актуальные торговые предложения
+        },
+        // Political Mode Carousel State
+        politicalCarouselIndex: 0,
+        politicalCountriesList: []
     },
+
+
+
+    // Данные юнитов
+    units: [
+        { id: 'soldier', name: 'Солдат', power: 5, turns: 1, cost: { food: 150, leather: 15 } },
+        { id: 'at_gun', name: 'Противотанковая пушка', power: 20, turns: 2, cost: { wood: 340, iron: 150, food: 100, leather: 30, oil: 20 } },
+        { id: 'howitzer', name: 'Гаубица', power: 35, turns: 3, cost: { wood: 400, iron: 220, coal: 130, food: 110, leather: 55, oil: 65 } },
+        { id: 'tank', name: 'Основной боевой танк', power: 60, turns: 4, cost: { wood: 900, iron: 660, coal: 200, food: 300, leather: 145, oil: 110 } },
+        { id: 'fighter', name: 'Истребитель', power: 55, turns: 4, cost: { wood: 890, iron: 550, coal: 220, food: 290, leather: 120, oil: 180 } },
+        { id: 'bomber', name: 'Бомбардировщик', power: 70, turns: 6, cost: { wood: 1045, iron: 790, coal: 270, food: 340, leather: 145, oil: 220 } },
+        { id: 'sniper', name: 'Снайпер', power: 15, turns: 2, cost: { food: 220, leather: 30, wood: 110, iron: 70 }, coinCost: 90 },
+        { id: 'medic', name: 'Медик', power: 10, turns: 2, cost: { food: 270, leather: 50, wood: 110, iron: 70, coal: 50 }, coinCost: 90 },
+        { id: 'vdv', name: 'ВДВ', power: 25, turns: 2, cost: { food: 170, leather: 20, wood: 110, iron: 90 }, coinCost: 60 },
+        { id: 'btr', name: 'БТР', power: 0, turns: 3, cost: { food: 300, leather: 100, wood: 190, iron: 220, coal: 180, oil: 200 }, coinCost: 120 },
+        { id: 'carrier', name: 'Авианосец', power: 0, turns: 5, cost: { food: 350, leather: 200, wood: 400, iron: 420, coal: 280, oil: 380, gold: 100 }, coinCost: 400 }
+    ],
+
 
     // База данных вопросов (основана на фактах)
     questions:
@@ -2467,8 +2509,7 @@ const game = {
             { "id": 1156, "text": "На что опирается власть при авторитарном режиме?", "answers": ["на церковь", "на армию", "на армию и церковь", "не знаю"], "correct": 1, "explanation": "При авторитарном режиме власть опирается на армию.", "continents": ["asia"], "period": "modern", "difficulty": 2, "historyType": "uzbekistan" },
             { "id": 1157, "text": "… — режим, при котором государство осуществляет полный (тотальный) контроль над всеми сферами жизни общества.", "answers": ["Авторитарный режим", "Тоталитарный режим", "Демократический режим", "Антидемократический режим"], "correct": 1, "explanation": "Тоталитарный режим — полный контроль государства над всеми сферами жизни.", "continents": ["asia"], "period": "modern", "difficulty": 1, "historyType": "uzbekistan" },
             { "id": 1158, "text": "Источником власти при демократическом строе является", "answers": ["Право", "Народ", "Власть", "Моральный авторитет"], "correct": 1, "explanation": "При демократическом строе источником власти является народ.", "continents": ["asia"], "period": "modern", "difficulty": 1, "historyType": "uzbekistan" }
-        ]
-    ,
+        ],
 
     // Переводы
     translations: {
@@ -2566,10 +2607,163 @@ const game = {
         localStorage.setItem('historyGameSettings', JSON.stringify(this.settings));
     },
 
+    countryData: {
+        // Современные страны с флагами
+        "Узбекистан": { flag: "🇺🇿", region: "Центральная Азия" },
+        "Россия": { flag: "🇷🇺", region: "Европа/Азия" },
+        "США": { flag: "🇺🇸", region: "Северная Америка" },
+        "Китай": { flag: "🇨🇳", region: "Восточная Азия" },
+        "Казахстан": { flag: "🇰🇿", region: "Центральная Азия" },
+        "Кыргызстан": { flag: "🇰🇬", region: "Центральная Азия" },
+        "Таджикистан": { flag: "🇹🇯", region: "Центральная Азия" },
+        "Туркменистан": { flag: "🇹🇲", region: "Центральная Азия" },
+        "Афганистан": { flag: "🇦🇫", region: "Центральная Азия" },
+        "Иран": { flag: "🇮🇷", region: "Ближний Восток" },
+        "Турция": { flag: "🇹🇷", region: "Ближний Восток" },
+        "Пакистан": { flag: "🇵🇰", region: "Южная Азия" },
+        "Индия": { flag: "🇮🇳", region: "Южная Азия" },
+        "Япония": { flag: "🇯🇵", region: "Восточная Азия" },
+        "Германия": { flag: "🇩🇪", region: "Европа" },
+        "Франция": { flag: "🇫🇷", region: "Европа" },
+        "Великобритания": { flag: "🇬🇧", region: "Европа" },
+        "Италия": { flag: "🇮🇹", region: "Европа" },
+        "Испания": { flag: "🇪🇸", region: "Европа" },
+        "Португалия": { flag: "🇵🇹", region: "Европа" },
+        "Нидерланды": { flag: "🇳🇱", region: "Европа" },
+        "Бельгия": { flag: "🇧🇪", region: "Европа" },
+        "Австрия": { flag: "🇦🇹", region: "Европа" },
+        "Польша": { flag: "🇵🇱", region: "Европа" },
+        "Украина": { flag: "🇺🇦", region: "Европа" },
+        "Греция": { flag: "🇬🇷", region: "Европа" },
+        "Болгария": { flag: "🇧🇬", region: "Европа" },
+        "Румыния": { flag: "🇷🇴", region: "Европа" },
+        "Венгрия": { flag: "🇭🇺", region: "Европа" },
+        "Сербия": { flag: "🇷🇸", region: "Европа" },
+        "Хорватия": { flag: "🇭🇷", region: "Европа" },
+        "Черногория": { flag: "🇲🇪", region: "Европа" },
+        "Литва": { flag: "🇱🇹", region: "Европа" },
+        "Латвия": { flag: "🇱🇻", region: "Европа" },
+        "Эстония": { flag: "🇪🇪", region: "Европа" },
+        "Финляндия": { flag: "🇫🇮", region: "Европа" },
+        "Швеция": { flag: "🇸🇪", region: "Европа" },
+        "Норвегия": { flag: "🇳🇴", region: "Европа" },
+        "Дания": { flag: "🇩🇰", region: "Европа" },
+        "Ирландия": { flag: "🇮🇪", region: "Европа" },
+        "Швейцария": { flag: "🇨🇭", region: "Европа" },
+        "Канада": { flag: "🇨🇦", region: "Северная Америка" },
+        "Мексика": { flag: "🇲🇽", region: "Северная Америка" },
+        "Бразилия": { flag: "🇧🇷", region: "Южная Америка" },
+        "Аргентина": { flag: "🇦🇷", region: "Южная Америка" },
+        "Чили": { flag: "🇨🇱", region: "Южная Америка" },
+        "Колумбия": { flag: "🇨🇴", region: "Южная Америка" },
+        "Перу": { flag: "🇵🇪", region: "Южная Америка" },
+        "Египет": { flag: "🇪🇬", region: "Африка" },
+        "ЮАР": { flag: "🇿🇦", region: "Африка" },
+        "Марокко": { flag: "🇲🇦", region: "Африка" },
+        "Австралия": { flag: "🇦🇺", region: "Океания" },
+        "Новая Зеландия": { flag: "🇳🇿", region: "Океания" },
+        "Исландия": { flag: "🇮🇸", region: "Европа" },
+        "Андорра": { flag: "🇦🇩", region: "Европа" },
+        "Ватикан": { flag: "🇻🇦", region: "Европа" },
+        "Монако": { flag: "🇲🇨", region: "Европа" },
+        "Сан-Марино": { flag: "🇸🇲", region: "Европа" },
+        "Лихтенштейн": { flag: "🇱🇮", region: "Европа" },
+        "Люксембург": { flag: "🇱🇺", region: "Европа" },
+        "Югославия": { flag: "⚔️", region: "Европа" },
+        "Словакия": { flag: "🇸🇰", region: "Европа" },
+        "Никарагуа": { flag: "🇳🇮", region: "Центральная Америка" },
+        "Панама": { flag: "🇵🇦", region: "Центральная Америка" },
+        "Сальвадор": { flag: "🇸🇻", region: "Центральная Америка" },
+        "Гаити": { flag: "🇭🇹", region: "Карибы" },
+        "Гватемала": { flag: "🇬🇹", region: "Центральная Америка" },
+        "Гондурас": { flag: "🇭🇳", region: "Центральная Америка" },
+        "Коста-Рика": { flag: "🇨🇷", region: "Центральная Америка" },
+        "Доминиканская Республика": { flag: "🇩🇴", region: "Карибы" },
+        "Куба": { flag: "🇨🇺", region: "Карибы" },
+        "Оман": { flag: "🇴🇲", region: "Ближний Восток" },
+        "Йемен": { flag: "🇾🇪", region: "Ближний Восток" },
+        "Саудовская Аравия": { flag: "🇸🇦", region: "Ближний Восток" },
+        "Ирак": { flag: "🇮🇶", region: "Ближний Восток" },
+        "Непал": { flag: "🇳🇵", region: "Южная Азия" },
+        "Таиланд": { flag: "🇹🇭", region: "Юго-Восточная Азия" },
+        "Южно-Африканский Союз (ЮАС)": { flag: "🇿🇦", region: "Африка" },
+        // Исторические государства
+        "Римская Империя": { flag: "🏛️", region: "Античность" },
+        "Древний Египет": { flag: "🏺", region: "Античность" },
+        "Персидская Империя": { flag: "🦁", region: "Античность" },
+        "Династия Хань": { flag: "🐉", region: "Античность" },
+        "Империя Маурьев": { flag: "🐘", region: "Античность" },
+        "Карфаген": { flag: "⛵", region: "Античность" },
+        "Греческие полисы": { flag: "🏛️", region: "Античность" },
+        "Византия": { flag: "⛪", region: "Средневековье" },
+        "Священная Римская Империя": { flag: "🦅", region: "Средневековье" },
+        "Арабский Халифат": { flag: "🌙", region: "Средневековье" },
+        "Монгольская Империя": { flag: "🏹", region: "Средневековье" },
+        "Киевская Русь": { flag: "⚔️", region: "Средневековье" },
+        "Королевство Франция": { flag: "⚜️", region: "Средневековье" },
+        "Королевство Англия": { flag: "🦁", region: "Средневековье" },
+        "Османская Империя": { flag: "🕌", region: "Средневековье" },
+        "Испанская Империя": { flag: "🚢", region: "Средневековье" },
+        "Империя Цин": { flag: "🏮", region: "Средневековье" },
+        "Сефевиды": { flag: "🕌", region: "Средневековье" },
+        "Империя Великих Моголов": { flag: "🕌", region: "Средневековье" },
+        "Русское Царство": { flag: "👑", region: "Средневековье" },
+        "Португальская Империя": { flag: "⛵", region: "Средневековье" },
+        "Британская Империя": { flag: "🦁", region: "Новое время" },
+        "Российская Империя": { flag: "👑", region: "Новое время" },
+        "Французская Империя": { flag: "⚜️", region: "Новое время" },
+        "Германская Империя": { flag: "🦅", region: "Новое время" },
+        "Австро-Венгрия": { flag: "🦅", region: "Новое время" },
+        "Японская Империя": { flag: "🌸", region: "Новое время" },
+        "СССР": { flag: "☭", region: "Новейшее время" },
+        "Третий Рейх": { flag: "🦅", region: "Новейшее время" },
+        "Бухарский эмират": { flag: "🕌", region: "Центральная Азия" },
+        "Хивинское ханство": { flag: "🏰", region: "Центральная Азия" },
+        "Кокандское ханство": { flag: "🏯", region: "Центральная Азия" },
+        "Золотая Орда": { flag: "🏹", region: "Средневековье" },
+        "Узбекский улус": { flag: "🐺", region: "Средневековье" },
+        "Чагатайский улус": { flag: "🐎", region: "Средневековье" },
+        "Государство Шейбанидов": { flag: "🦅", region: "Средневековье" },
+        "Империя Тимуридов": { flag: "👑", region: "Средневековье" },
+        "Саманиды": { flag: "🦁", region: "Средневековье" },
+        "Хорезмшахи": { flag: "🏰", region: "Средневековье" },
+        "Караханиды": { flag: "🌙", region: "Средневековье" },
+        "Сельджукиды": { flag: "🏹", region: "Средневековье" },
+        "Тюркский каганат": { flag: "🐺", region: "Средневековье" },
+        "Эфталиты": { flag: "🏹", region: "Средневековье" },
+        "Саки": { flag: "🏹", region: "Античность" },
+        "Согдиана": { flag: "💎", region: "Античность" },
+        "Бактрия": { flag: "🏛️", region: "Античность" },
+        "Хорезм": { flag: "🏰", region: "Античность" },
+        "Давань": { flag: "🐎", region: "Античность" },
+        "Кангюй": { flag: "🏹", region: "Античность" },
+        "Кушанское царство": { flag: "👑", region: "Античность" },
+        "Парфия": { flag: "🏹", region: "Античность" },
+        "Мидия": { flag: "🦁", region: "Античность" },
+        "Вавилон": { flag: "🏛️", region: "Античность" },
+        "Ассирия": { flag: "🦅", region: "Античность" },
+        "Финикия": { flag: "⛵", region: "Античность" },
+        "Спарта": { flag: "⚔️", region: "Античность" },
+        "Афины": { flag: "🦉", region: "Античность" },
+        "Македония": { flag: "☀️", region: "Античность" },
+        "Республика Рим": { flag: "🐺", region: "Античность" },
+        "Корея": { flag: "🇰🇷", region: "Восточная Азия" },
+        "Ацтеки": { flag: "🦅", region: "Средневековье" },
+        "Майя": { flag: "🛕", region: "Средневековье" },
+        "Инки": { flag: "🦙", region: "Средневековье" }
+    },
+
     // Настройка обработчиков событий
     setupEventListeners() {
         // Кнопки главного меню
         document.getElementById('startSinglePlayer')?.addEventListener('click', () => {
+            this.gameMode = 'single';
+            this.showScreen('settingsScreen');
+        });
+
+        document.getElementById('startPoliticalGame')?.addEventListener('click', () => {
+            this.gameMode = 'political';
+            this.settings.period = '20th_century'; // Default for political
             this.showScreen('settingsScreen');
         });
 
@@ -2644,6 +2838,10 @@ const game = {
                 btn.classList.add('active');
                 this.settings.period = btn.dataset.period;
                 this.saveSettings();
+
+                if (this.gameMode === 'political') {
+                    this.updateCarouselData();
+                }
             });
         });
 
@@ -2674,7 +2872,22 @@ const game = {
 
         // Кнопка начала игры
         document.getElementById('startGameBtn')?.addEventListener('click', () => {
-            this.startGame();
+            if (this.gameMode === 'political') {
+                const selectedCountry = this.state.politicalCountriesList[this.state.politicalCarouselIndex];
+                if (selectedCountry) {
+                    this.startPoliticalGame(selectedCountry);
+                }
+            } else {
+                this.startGame();
+            }
+        });
+
+        // Кнопки карусели
+        document.getElementById('carouselPrev')?.addEventListener('click', () => {
+            this.prevCarouselCountry();
+        });
+        document.getElementById('carouselNext')?.addEventListener('click', () => {
+            this.nextCarouselCountry();
         });
 
         // Пауза игры
@@ -2689,21 +2902,31 @@ const game = {
 
         // Следующий вопрос (теперь кнопка "Продолжить")
         document.getElementById('nextQuestion')?.addEventListener('click', () => {
-            // Скрываем карточку с объяснением
-            document.getElementById('explanationCard').style.display = 'none';
-            // Разблокируем карту для выбора следующей территории
-            this.state.isAnswering = false;
-
-            // Сбрасываем текст вопроса, чтобы побудить игрока выбрать новую территорию
-            document.getElementById('questionText').textContent = "Выберите страну на карте, чтобы атаковать!";
-            document.getElementById('answersContainer').innerHTML = '';
-            document.getElementById('timer').textContent = "--";
-
-            // Trigger Bot Turn AFTER player continues (or maybe immediately after answer?)
-            // If we do it here, it feels like "New Round".
-            // Let's do it here so player sees map updates.
-            this.botTurn();
+            game.proceedToNextRound();
         });
+    },
+
+    // Переход к следующему раунду после ответа
+    proceedToNextRound() {
+        // Если уже переходим, игнорируем
+        if (this._autoTransitionTimeout) {
+            clearTimeout(this._autoTransitionTimeout);
+            this._autoTransitionTimeout = null;
+        }
+
+        // Скрываем карточку с объяснением
+        document.getElementById('explanationCard').style.display = 'none';
+
+        // Разблокируем карту для выбора следующей территории
+        this.state.isAnswering = false;
+
+        // Сбрасываем текст вопроса, чтобы побудить игрока выбрать новую территорию
+        document.getElementById('questionText').textContent = "Выберите страну на карте, чтобы атаковать!";
+        document.getElementById('answersContainer').innerHTML = '';
+        document.getElementById('timer').textContent = "--";
+
+        // Trigger Bot Turn AFTER player continues
+        this.botTurn();
     },
 
     // Показать экран
@@ -2725,8 +2948,6 @@ const game = {
             this.updateStats();
         } else if (screenId === 'settingsScreen') {
             this.updateSettingsUI();
-        } else if (screenId === 'countrySelectionScreen') {
-            this.updateCountrySelectionUI();
         } else if (screenId === 'gameScreen' && this.state.map) {
             // Invalidate map size to fix rendering issues
             setTimeout(() => {
@@ -2737,152 +2958,131 @@ const game = {
         }
     },
 
-    // Динамическое обновление списка стран для политической игры
-    updateCountrySelectionUI() {
-        const grid = document.querySelector('.countries-grid');
-        if (!grid) return;
-        grid.innerHTML = '';
+    // Показать/скрыть загрузочный экран с переходом
+    showLoadingTransition(active, title = "Подготовка к завоеванию...", status = "Загрузка данных карты...") {
+        const overlay = document.getElementById('loadingTransition');
+        const titleEl = document.getElementById('loadingTitle');
+        const statusEl = document.getElementById('loadingStatus');
+        const barFill = overlay?.querySelector('.loading-bar-fill');
 
+        if (!overlay) return;
+
+        if (active) {
+            if (titleEl) titleEl.textContent = title;
+            if (statusEl) statusEl.textContent = status;
+            if (barFill) barFill.style.width = '10%'; // Начальное значение
+
+            // Мгновенно показываем черный фон, чтобы скрыть карту
+            overlay.style.transition = 'none';
+            overlay.style.display = 'flex';
+            overlay.style.opacity = '1';
+
+            // Запускаем анимацию контента через небольшую задержку
+            setTimeout(() => {
+                overlay.classList.add('active');
+                overlay.style.transition = 'opacity 0.8s ease-in-out';
+            }, 10);
+        } else {
+            if (barFill) barFill.style.width = '100%';
+            if (statusEl) statusEl.textContent = "Готово!";
+
+            setTimeout(() => {
+                overlay.classList.remove('active');
+                setTimeout(() => {
+                    overlay.style.display = 'none';
+                    if (barFill) barFill.style.width = '0%';
+                }, 800);
+            }, 500);
+        }
+    },
+
+    // Обновление прогресс-бара загрузки
+    updateLoadingProgress(percent, status) {
+        const overlay = document.getElementById('loadingTransition');
+        const barFill = overlay?.querySelector('.loading-bar-fill');
+        const statusEl = document.getElementById('loadingStatus');
+
+        if (barFill) barFill.style.width = percent + '%';
+        if (statusEl && status) statusEl.textContent = status;
+    },
+
+    // Логика карусели выбора страны
+    updateCarouselData() {
         const period = this.settings.period;
         const eraData = this.eraTerritories[period] || { "Мир": [] };
+        this.state.politicalCountriesList = Object.keys(eraData);
 
-        // Флаги и иконки для стран и исторических сущностей
-        const countryData = {
-            // Современные страны с флагами
-            "Узбекистан": { flag: "🇺🇿", region: "Центральная Азия" },
-            "Россия": { flag: "🇷🇺", region: "Европа/Азия" },
-            "США": { flag: "🇺🇸", region: "Северная Америка" },
-            "Китай": { flag: "🇨🇳", region: "Восточная Азия" },
-            "Казахстан": { flag: "🇰🇿", region: "Центральная Азия" },
-            "Кыргызстан": { flag: "🇰🇬", region: "Центральная Азия" },
-            "Таджикистан": { flag: "🇹🇯", region: "Центральная Азия" },
-            "Туркменистан": { flag: "🇹🇲", region: "Центральная Азия" },
-            "Афганистан": { flag: "🇦🇫", region: "Центральная Азия" },
-            "Иран": { flag: "🇮🇷", region: "Ближний Восток" },
-            "Турция": { flag: "🇹🇷", region: "Ближний Восток" },
-            "Пакистан": { flag: "🇵🇰", region: "Южная Азия" },
-            "Индия": { flag: "🇮🇳", region: "Южная Азия" },
-            "Япония": { flag: "🇯🇵", region: "Восточная Азия" },
-            "Германия": { flag: "🇩🇪", region: "Европа" },
-            "Франция": { flag: "🇫🇷", region: "Европа" },
-            "Великобритания": { flag: "🇬🇧", region: "Европа" },
-            "Италия": { flag: "🇮🇹", region: "Европа" },
-            "Испания": { flag: "🇪🇸", region: "Европа" },
-            "Португалия": { flag: "🇵🇹", region: "Европа" },
-            "Нидерланды": { flag: "🇳🇱", region: "Европа" },
-            "Бельгия": { flag: "🇧🇪", region: "Европа" },
-            "Австрия": { flag: "🇦🇹", region: "Европа" },
-            "Польша": { flag: "🇵🇱", region: "Европа" },
-            "Украина": { flag: "🇺🇦", region: "Европа" },
-            "Греция": { flag: "🇬🇷", region: "Европа" },
-            "Болгария": { flag: "🇧🇬", region: "Европа" },
-            "Румыния": { flag: "🇷🇴", region: "Европа" },
-            "Венгрия": { flag: "🇭🇺", region: "Европа" },
-            "Сербия": { flag: "🇷🇸", region: "Европа" },
-            "Хорватия": { flag: "🇭🇷", region: "Европа" },
-            "Черногория": { flag: "🇲🇪", region: "Европа" },
-            "Литва": { flag: "🇱🇹", region: "Европа" },
-            "Латвия": { flag: "🇱🇻", region: "Европа" },
-            "Эстония": { flag: "🇪🇪", region: "Европа" },
-            "Финляндия": { flag: "🇫🇮", region: "Европа" },
-            "Швеция": { flag: "🇸🇪", region: "Европа" },
-            "Норвегия": { flag: "🇳🇴", region: "Европа" },
-            "Дания": { flag: "🇩🇰", region: "Европа" },
-            "Ирландия": { flag: "🇮🇪", region: "Европа" },
-            "Швейцария": { flag: "🇨🇭", region: "Европа" },
-            "Канада": { flag: "🇨🇦", region: "Северная Америка" },
-            "Мексика": { flag: "🇲🇽", region: "Северная Америка" },
-            "Бразилия": { flag: "🇧🇷", region: "Южная Америка" },
-            "Аргентина": { flag: "🇦🇷", region: "Южная Америка" },
-            "Чили": { flag: "🇨🇱", region: "Южная Америка" },
-            "Колумбия": { flag: "🇨🇴", region: "Южная Америка" },
-            "Перу": { flag: "🇵🇪", region: "Южная Америка" },
-            "Египет": { flag: "🇪🇬", region: "Африка" },
-            "ЮАР": { flag: "🇿🇦", region: "Африка" },
-            "Марокко": { flag: "🇲🇦", region: "Африка" },
-            "Австралия": { flag: "🇦🇺", region: "Океания" },
-            "Новая Зеландия": { flag: "🇳🇿", region: "Океания" },
-            // Исторические государства
-            "Римская Империя": { flag: "🏛️", region: "Античность" },
-            "Древний Египет": { flag: "🏺", region: "Античность" },
-            "Персидская Империя": { flag: "🦁", region: "Античность" },
-            "Династия Хань": { flag: "🐉", region: "Античность" },
-            "Империя Маурьев": { flag: "🐘", region: "Античность" },
-            "Карфаген": { flag: "⛵", region: "Античность" },
-            "Греческие полисы": { flag: "🏛️", region: "Античность" },
-            "Византия": { flag: "⛪", region: "Средневековье" },
-            "Священная Римская Империя": { flag: "🦅", region: "Средневековье" },
-            "Арабский Халифат": { flag: "🌙", region: "Средневековье" },
-            "Монгольская Империя": { flag: "🏹", region: "Средневековье" },
-            "Киевская Русь": { flag: "⚔️", region: "Средневековье" },
-            "Королевство Франция": { flag: "⚜️", region: "Средневековье" },
-            "Королевство Англия": { flag: "🦁", region: "Средневековье" },
-            "Османская Империя": { flag: "🕌", region: "Средневековье" },
-            "Испанская Империя": { flag: "🚢", region: "Средневековье" },
-            "Империя Цин": { flag: "🏮", region: "Средневековье" },
-            "Сефевиды": { flag: "🕌", region: "Средневековье" },
-            "Империя Великих Моголов": { flag: "🕌", region: "Средневековье" },
-            "Русское Царство": { flag: "👑", region: "Средневековье" },
-            "Португальская Империя": { flag: "⛵", region: "Средневековье" },
-            "Британская Империя": { flag: "🦁", region: "Новое время" },
-            "Российская Империя": { flag: "👑", region: "Новое время" },
-            "Французская Империя": { flag: "⚜️", region: "Новое время" },
-            "Германская Империя": { flag: "🦅", region: "Новое время" },
-            "Австро-Венгрия": { flag: "🦅", region: "Новое время" },
-            "Японская Империя": { flag: "🌸", region: "Новое время" },
-            "СССР": { flag: "☭", region: "Новейшее время" },
-            "Третий Рейх": { flag: "🦅", region: "Новейшее время" },
-            "Бухарский эмират": { flag: "🕌", region: "Центральная Азия" },
-            "Хивинское ханство": { flag: "🏰", region: "Центральная Азия" },
-            "Кокандское ханство": { flag: "🏯", region: "Центральная Азия" },
-            "Золотая Орда": { flag: "🏹", region: "Средневековье" },
-            "Узбекский улус": { flag: "🐺", region: "Средневековье" },
-            "Чагатайский улус": { flag: "🐎", region: "Средневековье" },
-            "Государство Шейбанидов": { flag: "🦅", region: "Средневековье" },
-            "Империя Тимуридов": { flag: "👑", region: "Средневековье" },
-            "Саманиды": { flag: "🦁", region: "Средневековье" },
-            "Хорезмшахи": { flag: "🏰", region: "Средневековье" },
-            "Караханиды": { flag: "🌙", region: "Средневековье" },
-            "Сельджукиды": { flag: "🏹", region: "Средневековье" },
-            "Тюркский каганат": { flag: "🐺", region: "Средневековье" },
-            "Эфталиты": { flag: "🏹", region: "Средневековье" },
-            "Саки": { flag: "🏹", region: "Античность" },
-            "Согдиана": { flag: "💎", region: "Античность" },
-            "Бактрия": { flag: "🏛️", region: "Античность" },
-            "Хорезм": { flag: "🏰", region: "Античность" },
-            "Давань": { flag: "🐎", region: "Античность" },
-            "Кангюй": { flag: "🏹", region: "Античность" },
-            "Кушанское царство": { flag: "👑", region: "Античность" },
-            "Парфия": { flag: "🏹", region: "Античность" },
-            "Мидия": { flag: "🦁", region: "Античность" },
-            "Вавилон": { flag: "🏛️", region: "Античность" },
-            "Ассирия": { flag: "🦅", region: "Античность" },
-            "Финикия": { flag: "⛵", region: "Античность" },
-            "Спарта": { flag: "⚔️", region: "Античность" },
-            "Афины": { flag: "🦉", region: "Античность" },
-            "Македония": { flag: "☀️", region: "Античность" },
-            "Республика Рим": { flag: "🐺", region: "Античность" },
-            "Корея": { flag: "🇰🇷", region: "Восточная Азия" },
-            "Ацтеки": { flag: "🦅", region: "Средневековье" },
-            "Майя": { flag: "🛕", region: "Средневековье" },
-            "Инки": { flag: "🦙", region: "Средневековье" }
-        };
+        if (this.state.politicalCarouselIndex === undefined ||
+            this.state.politicalCarouselIndex === null ||
+            this.state.politicalCarouselIndex < 0 ||
+            this.state.politicalCarouselIndex >= this.state.politicalCountriesList.length) {
+            this.state.politicalCarouselIndex = 0;
+        }
 
-        Object.keys(eraData).forEach(name => {
-            const data = countryData[name] || { flag: "🏳️", region: "Неизвестно" };
-            const btn = document.createElement('button');
-            btn.className = 'country-card';
-            btn.dataset.country = name;
-            btn.innerHTML = `
-                <div class="country-flag">${data.flag}</div>
-                <div class="country-name">${name}</div>
-                <div class="country-region">${data.region}</div>
-            `;
-            btn.addEventListener('click', () => {
-                this.startPoliticalGame(name);
-            });
-            grid.appendChild(btn);
-        });
+        if (this.state.politicalCountriesList.length === 0) {
+            this.state.politicalCountriesList = ["Нет данных"];
+            this.state.politicalCarouselIndex = 0;
+        }
+
+        this.updateCarouselUI();
+    },
+
+    updateCarouselUI() {
+        const flagEl = document.getElementById('carouselFlag');
+        const nameEl = document.getElementById('carouselName');
+        const startBtn = document.getElementById('startGameBtn');
+
+        if (this.state.politicalCountriesList.length === 0) {
+            if (flagEl) flagEl.textContent = "🏳️";
+            if (nameEl) nameEl.textContent = "Нет доступных стран";
+            if (startBtn) startBtn.disabled = true;
+            return;
+        }
+
+        const countryName = this.state.politicalCountriesList[this.state.politicalCarouselIndex];
+        const data = this.countryData[countryName] || { flag: "🏳️" };
+
+        if (flagEl) flagEl.textContent = data.flag;
+        if (nameEl) nameEl.textContent = countryName;
+        if (startBtn) startBtn.disabled = false;
+    },
+
+    nextCarouselCountry() {
+        if (!this.state.politicalCountriesList || this.state.politicalCountriesList.length === 0) return;
+        this.state.politicalCarouselIndex = (this.state.politicalCarouselIndex + 1) % this.state.politicalCountriesList.length;
+
+        // Анимация
+        const flagEl = document.getElementById('carouselFlag');
+        if (flagEl) {
+            flagEl.style.transform = 'scale(0.8) translateX(20px)';
+            flagEl.style.opacity = '0';
+            setTimeout(() => {
+                this.updateCarouselUI();
+                flagEl.style.transform = 'scale(1) translateX(0)';
+                flagEl.style.opacity = '1';
+            }, 150);
+        } else {
+            this.updateCarouselUI();
+        }
+    },
+
+    prevCarouselCountry() {
+        if (!this.state.politicalCountriesList || this.state.politicalCountriesList.length === 0) return;
+        this.state.politicalCarouselIndex = (this.state.politicalCarouselIndex - 1 + this.state.politicalCountriesList.length) % this.state.politicalCountriesList.length;
+
+        // Анимация
+        const flagEl = document.getElementById('carouselFlag');
+        if (flagEl) {
+            flagEl.style.transform = 'scale(0.8) translateX(-20px)';
+            flagEl.style.opacity = '0';
+            setTimeout(() => {
+                this.updateCarouselUI();
+                flagEl.style.transform = 'scale(1) translateX(0)';
+                flagEl.style.opacity = '1';
+            }, 150);
+        } else {
+            this.updateCarouselUI();
+        }
     },
 
     // Переключение темы
@@ -2900,6 +3100,13 @@ const game = {
                 this.state.baseLayers.light.addTo(this.state.map);
             }
         }
+
+        // Bot logic now handled by RTS unit system (see game.botTurn override at bottom of file)
+        return;
+        // Выделяем выбранный тип истории
+        document.querySelectorAll('.type-card').forEach(card => {
+            card.classList.toggle('selected', card.dataset.type === this.settings.historyType);
+        });
 
         this.saveSettings();
         this.updateThemeText();
@@ -2940,6 +3147,14 @@ const game = {
 
     // Обновление настроек в UI
     updateSettingsUI() {
+        // Управление видимостью секций
+        document.querySelectorAll('.sp-only').forEach(el => {
+            el.style.display = this.gameMode === 'political' ? 'none' : 'block';
+        });
+        document.querySelectorAll('.pol-only').forEach(el => {
+            el.style.display = this.gameMode === 'political' ? 'block' : 'none';
+        });
+
         // Выделяем выбранный тип истории
         document.querySelectorAll('.type-card').forEach(card => {
             card.classList.toggle('selected', card.dataset.type === this.settings.historyType);
@@ -2950,10 +3165,26 @@ const game = {
             card.classList.toggle('selected', card.dataset.continent === this.settings.continent);
         });
 
-        // Выделяем выбранный период
+        // Выделяем выбранный период и скрываем лишние для политической игры
         document.querySelectorAll('.period-btn').forEach(btn => {
+            if (this.gameMode === 'political') {
+                if (btn.dataset.period === '20th_century' || btn.dataset.period === 'modern') {
+                    btn.style.display = 'inline-block';
+                } else {
+                    btn.style.display = 'none';
+                }
+            } else {
+                btn.style.display = 'inline-block';
+            }
             btn.classList.toggle('active', btn.dataset.period === this.settings.period);
         });
+
+        if (this.gameMode === 'political') {
+            if (this.settings.period !== '20th_century' && this.settings.period !== 'modern') {
+                this.settings.period = '20th_century';
+            }
+            this.updateCarouselData();
+        }
 
         // Выделяем выбранную сложность
         document.querySelectorAll('.diff-btn').forEach(btn => {
@@ -2968,33 +3199,18 @@ const game = {
 
     // Обновление статистики
     async updateStats() {
-        let stats = {};
-
-        if (this.user) {
-            // Загружаем из Firebase
-            try {
-                const snapshot = await db.ref(`users/${this.user.uid}/stats`).once('value');
-                stats = snapshot.val() || {};
-            } catch (e) {
-                console.error("Ошибка загрузки статистики из Firebase:", e);
-                stats = JSON.parse(localStorage.getItem('historyGameStats') || '{}');
-            }
-        } else {
-            // Загружаем локально
-            stats = JSON.parse(localStorage.getItem('historyGameStats') || '{}');
-        }
-
-        document.getElementById('totalGames').textContent = stats.totalGames || 0;
-        document.getElementById('territoriesCaptured').textContent = stats.totalTerritories || 0;
-
-        const correctPercentage = stats.totalQuestions ?
-            Math.round((stats.correctAnswers / stats.totalQuestions) * 100) : 0;
-        document.getElementById('correctAnswers').textContent = `${correctPercentage}%`;
+        // Используем новый метод через Supabase (определён ниже)
+        game.updateStats();
     },
 
     // Начало игры
     startGame() {
         this.resetGameState();
+        document.getElementById('questionContainer').style.display = 'block';
+        if (document.getElementById('territoryInfoContainer')) {
+            document.getElementById('territoryInfoContainer').style.display = 'none';
+        }
+        document.getElementById('resourcePanel').style.display = 'none';
         this.showScreen('gameScreen');
 
         setTimeout(() => {
@@ -3063,11 +3279,24 @@ const game = {
             isAnswering: false,
             botTerritories: 0,
             botLoop: null,
+            politicalCarouselIndex: 0,
+            politicalCountriesList: [],
+            mapViewMode: 'political', // 'political' or 'production'
             map: null, // Карта будет создана заново в generateMap
             politicalMode: {
                 enabled: false,
                 playerCountry: null,
-                resources: { wood: 0, coal: 0, iron: 0, oil: 0, gold: 0 },
+                resources: {
+                    wood: 800,
+                    coal: 100,
+                    iron: 400,
+                    oil: 60,
+                    gold: 20,
+                    coins: 100,
+                    food: 1500,
+                    leather: 300,
+                    manpower: 100
+                },
                 stars: 100,
                 productionTimer: null,
                 maintenanceTimer: null,
@@ -3076,13 +3305,22 @@ const game = {
                 revoltCountdown: 90,
                 territoryNeighbors: {},
                 territoryResources: {},
-                botCountries: []
+                botCountries: [],
+                army: { soldier: 0, tank: 0, fighter: 0, bomber: 0, at_gun: 0, howitzer: 0 },
+                productionQueue: [],
+                diplomacyRelations: {},
+                selectedProductionTerritories: [], // Массив ID выбранных территорий
+                attackMarkers: {} // Маркеры атак на карте
             }
         };
+
 
         document.getElementById('capturedCount').textContent = '0';
         document.getElementById('score').textContent = '0';
         document.getElementById('questionNumber').textContent = '1';
+
+        const prodBtns = document.getElementById('productionBtns');
+        if (prodBtns) prodBtns.style.display = 'none';
     },
 
     // Запуск цикла захвата ботом
@@ -3101,7 +3339,7 @@ const game = {
 
     // Генерация карты (Leaflet)
     // Генерация карты (Leaflet)
-    generateMap() {
+    async generateMap() {
         const mapContainer = document.getElementById('territoryMap');
         if (!mapContainer) return;
 
@@ -3125,7 +3363,8 @@ const game = {
         this.state.map = L.map('territoryMap', {
             zoomControl: false,
             attributionControl: false,
-            preferCanvas: true // Optimization
+            preferCanvas: true, // Optimization
+            maxBoundsViscosity: 1.0 // Делает границы жесткими
         }).setView([20, 0], 2);
 
         // Zoom control
@@ -3158,33 +3397,69 @@ const game = {
         }
 
         // Load GeoJSON
-        this.loadTerritories();
+        await this.loadTerritories();
     },
 
     async loadTerritories() {
         try {
             document.getElementById('mapTitle').textContent = "Загрузка всего мира...";
 
-            let data;
-            if (this.geoJsonCache) {
-                data = this.geoJsonCache;
-            } else {
-                // Пытаемся загрузить локальный файл, если не выйдет - берем из сети
+            // Сначала загружаем страны в любом случае, они нужны как база (и для кэша, и для викторины)
+            if (!this.geoJsonCache) {
                 try {
                     const localResponse = await fetch('assets/data/countries.geojson');
                     if (localResponse.ok) {
-                        data = await localResponse.json();
+                        this.geoJsonCache = await localResponse.json();
                     }
                 } catch (e) {
                     console.warn("Local GeoJSON not found, fetching from GitHub...");
                 }
 
-                if (!data) {
+                if (!this.geoJsonCache) {
                     const response = await fetch('https://raw.githubusercontent.com/johan/world.geo.json/master/countries.geo.json');
                     if (!response.ok) throw new Error("Network response was not ok");
-                    data = await response.json();
+                    this.geoJsonCache = await response.json();
                 }
-                this.geoJsonCache = data;
+            }
+
+            let data;
+            if (this.gameMode === 'political') {
+                if (this.provincesCache) {
+                    data = JSON.parse(JSON.stringify(this.provincesCache));
+                } else {
+                    try {
+                        const response = await fetch('https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_admin_1_states_provinces.geojson');
+                        if (!response.ok) throw new Error("Network response was not ok");
+                        const provData = await response.json();
+
+                        // В ne_50m_admin_1_states_provinces нет многих стран Африки и Европы.
+                        // Поэтому мы берем базовые страны и добавляем их, если их нет в провинциях.
+                        const countriesInProvinces = new Set();
+                        provData.features.forEach(f => {
+                            const cName = f.properties.admin || f.properties.ADMIN || f.properties.NAME;
+                            if (cName) countriesInProvinces.add(cName);
+                        });
+
+                        this.geoJsonCache.features.forEach(f => {
+                            const cName = f.properties.NAME || f.properties.name;
+                            if (cName && !countriesInProvinces.has(cName)) {
+                                // Добавляем целую страну как "провинцию"
+                                const newFeature = JSON.parse(JSON.stringify(f));
+                                newFeature.properties.admin = cName;
+                                newFeature.properties.name = cName;
+                                provData.features.push(newFeature);
+                            }
+                        });
+
+                        this.provincesCache = provData;
+                        data = JSON.parse(JSON.stringify(this.provincesCache));
+                    } catch (e) {
+                        console.error("Failed to load provinces GeoJSON:", e);
+                        data = JSON.parse(JSON.stringify(this.geoJsonCache));
+                    }
+                }
+            } else {
+                data = JSON.parse(JSON.stringify(this.geoJsonCache));
             }
 
             this.generateTerritoryPolygons(data);
@@ -3192,7 +3467,11 @@ const game = {
             if (this.state.geoJsonLayer) {
                 const bounds = this.state.geoJsonLayer.getBounds();
                 if (bounds.isValid()) {
-                    this.state.map.fitBounds(bounds, { padding: [50, 50] });
+                    this.state.map.fitBounds(bounds, { padding: [0, 0] });
+                    // Устанавливаем строгие границы и минимальный зум,
+                    // чтобы нельзя было отдалить так, чтобы появилась белая полоса.
+                    this.state.map.setMaxBounds(bounds);
+                    this.state.map.setMinZoom(this.state.map.getZoom());
                 }
             }
 
@@ -3287,75 +3566,170 @@ const game = {
             "Либерия": ["Liberia"]
         },
         '20th_century': {
-            "СССР": ["Russia", "Ukraine", "Belarus", "Kazakhstan", "Uzbekistan", "Kyrgyzstan", "Tajikistan", "Turkmenistan", "Georgia", "Armenia", "Azerbaijan", "Estonia", "Latvia", "Lithuania", "Moldova"],
-            "США": ["United States of America", "Philippines", "Puerto Rico", "Guam"],
-            "Британское Содружество": ["United Kingdom", "Canada", "Australia", "New Zealand", "India", "Pakistan", "Bangladesh", "Myanmar", "Malaysia", "Egypt", "Sudan", "South Africa", "Namibia", "Kenya", "Uganda", "Tanzania", "Nigeria", "Ghana", "Sierra Leone", "Gambia", "Guyana", "Jamaica", "Trinidad and Tobago", "Fiji", "Solomon Is.", "Vanuatu"],
-            "Третий Рейх": ["Germany", "Austria", "Poland", "France", "Czech Republic", "Denmark", "Belgium", "Netherlands", "Luxembourg", "Greenland", "Slovakia"],
-            "Япония": ["Japan", "South Korea", "North Korea", "Taiwan"],
-            "Китай": ["China"],
-            "Французская Империя": ["France", "Vietnam", "Laos", "Cambodia", "Algeria", "Tunisia", "Morocco", "Mali", "Mauritania", "Senegal", "Guinea", "Cote d'Ivoire", "Burkina Faso", "Benin", "Niger", "Gabon", "Congo", "Chad", "Central African Rep.", "Madagascar", "Djibouti", "Guyana", "New Caledonia", "Vanuatu"],
-            "Италия": ["Italy", "Libya", "Eritrea", "Somalia", "Ethiopia", "Albania"],
-            "Испания": ["Spain", "Western Sahara", "Eq. Guinea", "Morocco"],
-            "Португалия": ["Portugal", "Angola", "Mozambique", "Guinea-Bissau", "Timor-Leste"],
-            "Бельгия": ["Belgium", "Dem. Rep. Congo"],
-            "Нидерланды": ["Netherlands", "Indonesia", "Suriname"],
-            "Швейцария": ["Switzerland"],
-            "Норвегия": ["Norway"],
-            "Швеция": ["Sweden"],
-            "Финляндия": ["Finland"],
-            "Венгрия": ["Hungary"],
-            "Румыния": ["Romania"],
+            // Европа
+            "Андорра": ["Andorra"],
+            "Бельгия": ["Belgium", "Dem. Rep. Congo", "Rwanda", "Burundi"],
             "Болгария": ["Bulgaria"],
-            "Сербия": ["Serbia"],
-            "Югославия": ["Serbia", "Croatia", "Slovenia", "Bosnia and Herz.", "North Macedonia", "Montenegro", "Kosovo"],
+            "Ватикан": ["Vatican"],
+            "Великобритания": ["United Kingdom", "India", "Pakistan", "Bangladesh", "Myanmar", "Malaysia", "Nigeria", "Ghana", "Sierra Leone", "Gambia", "Kenya", "Uganda", "Tanzania", "Zambia", "Zimbabwe", "Malawi", "Botswana", "Cyprus", "Guyana", "Jamaica", "Trinidad and Tobago", "Kuwait", "United Arab Emirates", "Jordan", "Israel", "Palestine"],
+            "Венгрия": ["Hungary"],
+            "Германия": ["Germany", "Austria", "Czech Republic"],
             "Греция": ["Greece"],
-            "Албания": ["Albania"],
+            "Дания": ["Denmark", "Greenland"],
             "Ирландия": ["Ireland"],
             "Исландия": ["Iceland"],
-            "Монгольская народная республика": ["Mongolia"],
-            "Иран": ["Iran"],
+            "Испания": ["Spain", "Western Sahara", "Eq. Guinea"],
+            "Италия": ["Italy", "Albania", "Ethiopia", "Eritrea", "Somalia", "Libya"],
+            "Латвия": ["Latvia"],
+            "Литва": ["Lithuania"],
+            "Лихтенштейн": ["Liechtenstein"],
+            "Люксембург": ["Luxembourg"],
+            "Монако": ["Monaco"],
+            "Нидерланды": ["Netherlands", "Indonesia", "Suriname"],
+            "Норвегия": ["Norway"],
+            "Польша": ["Poland"],
+            "Португалия": ["Portugal", "Angola", "Mozambique", "Guinea-Bissau", "Timor-Leste"],
+            "Румыния": ["Romania", "Moldova"],
+            "Сан-Марино": ["San Marino"],
+            "Словакия": ["Slovakia"],
+            "СССР": ["Russia", "Ukraine", "Belarus", "Kazakhstan", "Uzbekistan", "Kyrgyzstan", "Tajikistan", "Turkmenistan", "Georgia", "Armenia", "Azerbaijan"],
+            "Финляндия": ["Finland"],
+            "Франция": ["France", "Vietnam", "Laos", "Cambodia", "Algeria", "Tunisia", "Morocco", "Mali", "Mauritania", "Senegal", "Guinea", "Cote d'Ivoire", "Burkina Faso", "Benin", "Niger", "Gabon", "Congo", "Chad", "Central African Rep.", "Madagascar", "Djibouti", "Guyana", "New Caledonia", "Vanuatu", "Syria", "Lebanon"],
+            "Швейцария": ["Switzerland"],
+            "Швеция": ["Sweden"],
+            "Эстония": ["Estonia"],
+            "Югославия": ["Serbia", "Croatia", "Slovenia", "Bosnia and Herz.", "North Macedonia", "Montenegro", "Kosovo"],
+
+            // Азия
             "Афганистан": ["Afghanistan"],
-            "Турция": ["Turkey"],
             "Ирак": ["Iraq"],
-            "Саудовская Аравия": ["Saudi Arabia"],
+            "Иран": ["Iran"],
             "Йемен": ["Yemen"],
-            "Палестина": ["Israel", "Palestine"],
-            "Ливан": ["Lebanon"],
-            "Сирия": ["Syria"],
-            "Оман": ["Oman", "United Arab Emirates"],
-            "Кувейт": ["Kuwait"],
+            "Китай": ["China"],
+            "Монголия": ["Mongolia"],
             "Непал": ["Nepal"],
-            "Бутан": ["Bhutan"],
+            "Оман": ["Oman"],
+            "Саудовская Аравия": ["Saudi Arabia"],
             "Таиланд": ["Thailand"],
-            "Мексика": ["Mexico"],
-            "Бразилия": ["Brazil"],
+            "Турция": ["Turkey"],
+            "Япония": ["Japan", "South Korea", "North Korea", "Taiwan"],
+
+            // Америка
             "Аргентина": ["Argentina"],
-            "Чили": ["Chile"],
-            "Уругвай": ["Uruguay"],
-            "Парагвай": ["Paraguay"],
             "Боливия": ["Bolivia"],
-            "Перу": ["Peru"],
-            "Эквадор": ["Ecuador"],
-            "Колумбия": ["Colombia"],
+            "Бразилия": ["Brazil"],
             "Венесуэла": ["Venezuela"],
-            "Панама": ["Panama"],
-            "Коста-Рика": ["Costa Rica"],
-            "Никарагуа": ["Nicaragua"],
-            "Гондурас": ["Honduras"],
-            "Сальвадор": ["El Salvador"],
-            "Гватемала": ["Guatemala"],
-            "Куба": ["Cuba"],
             "Гаити": ["Haiti"],
+            "Гватемала": ["Guatemala"],
+            "Гондурас": ["Honduras"],
             "Доминиканская Республика": ["Dominican Rep."],
-            "Эфиопия": ["Ethiopia"],
+            "Колумбия": ["Colombia"],
+            "Коста-Рика": ["Costa Rica"],
+            "Куба": ["Cuba"],
+            "Мексика": ["Mexico"],
+            "Никарагуа": ["Nicaragua"],
+            "Панама": ["Panama"],
+            "Парагвай": ["Paraguay"],
+            "Перу": ["Peru"],
+            "Сальвадор": ["El Salvador"],
+            "США": ["United States of America", "Philippines", "Puerto Rico", "Guam"],
+            "Уругвай": ["Uruguay"],
+            "Чили": ["Chile"],
+            "Эквадор": ["Ecuador"],
+
+            // Британские доминионы
+            "Австралия": ["Australia", "Papua New Guinea"],
+            "Канада": ["Canada"],
+            "Новая Зеландия": ["New Zealand"],
+            "Южно-Африканский Союз (ЮАС)": ["South Africa", "Namibia"],
+
+            // Африка
+            "Египет": ["Egypt", "Sudan"],
             "Либерия": ["Liberia"]
         },
+        modern: {
+            "Россия": ["Russia"],
+            "США": ["United States of America"],
+            "Китай": ["China"],
+            "Великобритания": ["United Kingdom"],
+            "Франция": ["France"],
+            "Германия": ["Germany"],
+            "Япония": ["Japan"],
+            "Индия": ["India"],
+            "Бразилия": ["Brazil"],
+            "Турция": ["Turkey"],
+            "Италия": ["Italy"],
+            "Казахстан": ["Kazakhstan"],
+            "Узбекистан": ["Uzbekistan"],
+            "Украина": ["Ukraine"],
+            "Беларусь": ["Belarus"],
+            "Польша": ["Poland"],
+            "Канада": ["Canada"],
+            "Австралия": ["Australia"],
+            "Египет": ["Egypt"],
+            "Иран": ["Iran"],
+            "Пакистан": ["Pakistan"],
+            "Индонезия": ["Indonesia"],
+            "Мексика": ["Mexico"],
+            "ЮАР": ["South Africa"],
+            "Саудовская Аравия": ["Saudi Arabia"]
+        }
+    },
+
+    // Получение уникального цвета из строки (хэш) или заранее заданного для мажоров
+    stringToColor(str) {
+        const presetColors = {
+            "СССР": "#c62828", // Красный
+            "Третий Рейх": "#37474f", // Темно-серый
+            "Германия": "#37474f",
+            "США": "#1565c0", // Синий
+            "Британское Содружество": "#e57373", // Розово-красный
+            "Великобритания": "#e57373",
+            "Япония": "#f9a825", // Желто-оранжевый
+            "Китай": "#fbc02d", // Желтый
+            "Французская Империя": "#1e88e5", // Французский синий
+            "Франция": "#1e88e5",
+            "Италия": "#2e7d32", // Зеленый
+            "Испания": "#f57f17", // Золотой
+            "Португалия": "#388e3c", // Изумрудный
+            "Бельгия": "#795548", // Коричневый
+            "Нидерланды": "#f57c00", // Оранжевый
+            "Швеция": "#0277bd", // Шведский синий
+            "Турция": "#b71c1c", // Темно-красный
+            "Османская империя": "#b71c1c",
+            "Российская Империя": "#fbc02d", // Имперский желтый
+            "Монгольская империя": "#6a1b9a", // Фиолетовый
+            "Римская Империя": "#880e4f", // Бордовый
+            "Бразилия": "#43a047", // Зеленый
+            "Индия": "#ff8f00", // Шафрановый
+            "Польша": "#d81b60", // Малиновый
+            "Югославия": "#00838f", // Бирюзовый
+            "Австро-Венгрия": "#fafad2", // Бледно-желтый
+            "Словакия": "#1e88e5",
+            "Мексика": "#00695c" // Темно-бирюзовый
+        };
+
+
+        if (presetColors[str]) {
+            return presetColors[str];
+        }
+
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) {
+            hash = str.charCodeAt(i) + ((hash << 5) - hash);
+        }
+
+        // Генерируем сбалансированный HSL цвет (не слишком яркий, в духе парадокс-стратегий)
+        const hue = Math.abs(hash) % 360;
+        const saturation = 45 + (Math.abs(hash) % 20); // 45-65%
+        const lightness = 35 + (Math.abs(hash) % 15);  // 35-50%
+
+        return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
     },
 
     // Получение уникального цвета для территории
     getUniqueColor(id) {
         // Используем золотое сечение для распределения цветов
-        // Saturation reduced for a more "serious" / historical feel
         const hue = (id * 137.508) % 360;
         return `hsl(${hue}, 30%, 45%)`;
     },
@@ -3370,52 +3744,171 @@ const game = {
         if (this.settings.period !== 'any' && this.settings.period !== 'modern') {
             const eraData = this.eraTerritories[this.settings.period];
             if (eraData) {
-                const groupedFeatures = {};
+                if (this.gameMode === 'political') {
+                    // POLITICAL MODE: Каждая провинция отдельно, назначаем исторического владельца
+                    const freeLandFeatures = [];
+                    const processedFeatures = [];
 
-                features.forEach(feature => {
-                    const countryName = feature.properties.NAME || feature.properties.name;
-                    for (const [historicalName, countries] of Object.entries(eraData)) {
-                        if (countries.includes(countryName)) {
-                            if (!groupedFeatures[historicalName]) groupedFeatures[historicalName] = [];
-                            groupedFeatures[historicalName].push(feature);
-                            break;
+                    const countrySmallFeatures = {};
+                    const finalFeatures = [];
+
+                    features.forEach(feature => {
+                        let area = 0;
+                        try {
+                            let minX = 1000, maxX = -1000, minY = 1000, maxY = -1000;
+                            const processRing = (ring) => {
+                                ring.forEach(coord => {
+                                    if (coord[0] < minX) minX = coord[0];
+                                    if (coord[0] > maxX) maxX = coord[0];
+                                    if (coord[1] < minY) minY = coord[1];
+                                    if (coord[1] > maxY) maxY = coord[1];
+                                });
+                            };
+                            if (feature.geometry && feature.geometry.coordinates) {
+                                if (feature.geometry.type === 'Polygon') {
+                                    feature.geometry.coordinates.forEach(processRing);
+                                } else if (feature.geometry.type === 'MultiPolygon') {
+                                    feature.geometry.coordinates.forEach(poly => poly.forEach(processRing));
+                                }
+                                if (minX !== 1000) area = (maxX - minX) * (maxY - minY);
+                            }
+                        } catch (e) { }
+
+                        const countryName = feature.properties.admin || feature.properties.ADMIN || feature.properties.NAME || 'Неизвестная страна';
+                        const type = (feature.properties.type_en || feature.properties.type || "").toLowerCase();
+                        const isCity = type.includes('city') || type.includes('municipality') || type.includes('borough') || type.includes('water');
+
+                        if ((area > 0 && area < 0.5) || isCity) {
+                            if (countryName !== 'Неизвестная страна') {
+                                if (!countrySmallFeatures[countryName]) countrySmallFeatures[countryName] = [];
+                                countrySmallFeatures[countryName].push(feature);
+                            } else {
+                                finalFeatures.push(feature);
+                            }
+                        } else {
+                            finalFeatures.push(feature);
+                        }
+                    });
+
+                    for (const [countryName, smallFeatures] of Object.entries(countrySmallFeatures)) {
+                        if (smallFeatures.length === 1) {
+                            finalFeatures.push(smallFeatures[0]);
+                        } else {
+                            const combinedCoordinates = [];
+                            smallFeatures.forEach(f => {
+                                if (f.geometry && f.geometry.type === 'Polygon') {
+                                    combinedCoordinates.push(f.geometry.coordinates);
+                                } else if (f.geometry && f.geometry.type === 'MultiPolygon') {
+                                    f.geometry.coordinates.forEach(c => combinedCoordinates.push(c));
+                                }
+                            });
+
+                            if (combinedCoordinates.length > 0) {
+                                const mergedFeature = {
+                                    type: "Feature",
+                                    properties: JSON.parse(JSON.stringify(smallFeatures[0].properties)),
+                                    geometry: {
+                                        type: "MultiPolygon",
+                                        coordinates: combinedCoordinates
+                                    }
+                                };
+                                mergedFeature.properties.name = `Объединенные города (${countryName})`;
+                                mergedFeature.properties.admin = countryName;
+                                finalFeatures.push(mergedFeature);
+                            }
                         }
                     }
-                });
 
-                // Преобразуем группы в массив фич с использованием Turf.js для объединения геометрий
-                features = Object.entries(groupedFeatures).map(([name, countryFeatures]) => {
-                    try {
-                        let combinedGeometry = countryFeatures[0].geometry;
+                    finalFeatures.forEach(feature => {
+                        const provinceName = feature.properties.name || feature.properties.NAME || 'Неизвестная провинция';
+                        const countryName = feature.properties.admin || feature.properties.ADMIN || feature.properties.NAME || 'Неизвестная страна';
 
-                        // Если в группе больше одной страны, объединяем их
-                        if (countryFeatures.length > 1) {
-                            let union = countryFeatures[0];
-                            for (let i = 1; i < countryFeatures.length; i++) {
-                                union = turf.union(union, countryFeatures[i]);
+                        let owner = countryName; // По умолчанию страна независима
+                        let isFreeLand = false;
+
+                        // Ищем, кому принадлежит эта страна в данной эпохе
+                        for (const [historicalName, countries] of Object.entries(eraData)) {
+                            if (countries.includes(countryName)) {
+                                owner = historicalName;
+                                break;
                             }
-                            combinedGeometry = union.geometry;
                         }
 
-                        return {
-                            type: "Feature",
-                            properties: { name: name },
-                            geometry: combinedGeometry
-                        };
-                    } catch (e) {
-                        console.error("Turf union failed for", name, e);
-                        // Fallback to GeometryCollection if union fails
-                        return {
-                            type: "Feature",
-                            properties: { name: name },
-                            geometry: {
-                                type: "GeometryCollection",
-                                geometries: countryFeatures.map(f => f.geometry)
+                        // Если у провинции совсем нет страны, делаем свободной землей
+                        if (countryName === 'Неизвестная страна' || !countryName.trim()) {
+                            feature.properties.name = "Свободная земля: " + provinceName;
+                            feature.properties.isFreeLand = true;
+                            feature.properties.historicalOwner = 'Свободная земля';
+                            freeLandFeatures.push(feature);
+                        } else {
+                            feature.properties.name = provinceName;
+                            feature.properties.countryName = countryName;
+                            feature.properties.historicalOwner = owner;
+                            feature.properties.isFreeLand = false;
+                            processedFeatures.push(feature);
+                        }
+                    });
+
+                    features = processedFeatures.concat(freeLandFeatures);
+                } else {
+                    // SINGLE PLAYER: Объединение стран в исторические империи
+                    const groupedFeatures = {};
+
+                    features.forEach(feature => {
+                        const countryName = feature.properties.NAME || feature.properties.name;
+                        let found = false;
+                        for (const [historicalName, countries] of Object.entries(eraData)) {
+                            if (countries.includes(countryName)) {
+                                if (!groupedFeatures[historicalName]) groupedFeatures[historicalName] = [];
+                                groupedFeatures[historicalName].push(feature);
+                                found = true;
+                                break;
                             }
-                        };
-                    }
-                });
+                        }
+                    });
+
+                    // Преобразуем группы в массив фич с использованием Turf.js для объединения геометрий
+                    features = Object.entries(groupedFeatures).map(([name, countryFeatures]) => {
+                        try {
+                            let combinedGeometry = countryFeatures[0].geometry;
+
+                            // Если в группе больше одной страны, объединяем их
+                            if (countryFeatures.length > 1) {
+                                const fc = turf.featureCollection(countryFeatures);
+                                const union = turf.union(fc);
+                                combinedGeometry = union.geometry;
+                            }
+
+                            return {
+                                type: "Feature",
+                                properties: { name: name },
+                                geometry: combinedGeometry
+                            };
+                        } catch (e) {
+                            console.error("Turf union failed for", name, e);
+                            return {
+                                type: "Feature",
+                                properties: { name: name },
+                                geometry: {
+                                    type: "GeometryCollection",
+                                    geometries: countryFeatures.map(f => f.geometry)
+                                }
+                            };
+                        }
+                    });
+                }
             }
+        } else if (this.gameMode === 'political') {
+            // MODERN ERA / POLITICAL
+            features.forEach(feature => {
+                const provinceName = feature.properties.name || feature.properties.NAME || 'Неизвестная провинция';
+                const countryName = feature.properties.admin || feature.properties.ADMIN || feature.properties.NAME || '';
+
+                feature.properties.name = provinceName;
+                feature.properties.countryName = countryName;
+                feature.properties.historicalOwner = countryName;
+                feature.properties.isFreeLand = false;
+            });
         }
 
         // Все территории доступны, лимиты влияют только на правила победы
@@ -3423,13 +3916,30 @@ const game = {
         document.getElementById('totalTerritories').textContent = this.state.totalTerritories;
 
         const getStyle = (feature) => {
-            const idx = features.indexOf(feature);
+            if (feature.properties.isFreeLand) {
+                return {
+                    fillColor: '#606060', // Серый цвет для свободных земель
+                    weight: 1.2,
+                    opacity: 0.8,
+                    color: '#404040',
+                    fillOpacity: 0.5
+                };
+            }
+
+            let color;
+            if (this.gameMode === 'political') {
+                color = this.stringToColor(feature.properties.historicalOwner || feature.properties.countryName);
+            } else {
+                const idx = features.indexOf(feature);
+                color = this.getUniqueColor(idx);
+            }
+
             return {
-                fillColor: this.getUniqueColor(idx),
-                weight: 1.2,
+                fillColor: color,
+                weight: 0.5,
                 opacity: 0.8,
-                color: 'rgba(212, 175, 55, 0.6)',
-                fillOpacity: 0.4
+                color: 'rgba(212, 175, 55, 0.5)',
+                fillOpacity: this.gameMode === 'political' ? 0.7 : 0.4
             };
         };
 
@@ -3464,7 +3974,11 @@ const game = {
                     mouseout: (e) => {
                         const l = e.target;
                         if (!territory.captured) {
-                            this.state.geoJsonLayer.resetStyle(l);
+                            if (this.gameMode === 'political') {
+                                this.updateTerritoryStyle(territory.id);
+                            } else {
+                                this.state.geoJsonLayer.resetStyle(l);
+                            }
                         }
                     },
                     click: (e) => {
@@ -3484,8 +3998,129 @@ const game = {
         }).addTo(this.state.map);
     },
 
-    // Обработка клика по территории
     handleTerritoryClick(territory) {
+        if (this.state.politicalMode && this.state.politicalMode.enabled) {
+            const pm = this.state.politicalMode;
+
+            // Если территория под атакой, открываем окно обороны
+            if (territory.pendingAttack) {
+                this.openDefenseModal(territory.id);
+                return;
+            }
+
+
+            // Если мы в режиме производства, обрабатываем множественный выбор
+            if (this.state.mapViewMode === 'production') {
+                if (territory.owner === 'player') {
+                    const selected = pm.selectedProductionTerritories;
+                    const index = selected.indexOf(territory.id);
+
+                    if (index > -1) {
+                        selected.splice(index, 1);
+                    } else {
+                        selected.push(territory.id);
+                    }
+
+                    // Обновляем визуально только кликнутую
+                    this.updateTerritoryStyle(territory.id);
+
+                    // Показываем/скрываем нижнюю панель
+                    const bar = document.getElementById('productionBar');
+                    if (selected.length > 0) {
+                        bar.style.display = 'flex';
+                    } else {
+                        bar.style.display = 'none';
+                    }
+                }
+                return;
+            }
+
+            if (this.state.mapViewMode === 'battle') {
+                const rel = territory.owner ? this.getDiplomacyRelation('player', territory.owner) : 'neutral';
+
+                // КЛИК ПО ИСТИННО НЕЙТРАЛЬНОЙ ЗЕМЛЕ (Зеленая зона)
+                if (territory.owner === 'neutral') {
+                    if (pm.actionsLeft <= 0) {
+                        this.showNotification("Недостаточно очков действий для захвата!", "warning");
+                        return;
+                    }
+
+                    if (confirm(`Эти земли ничейны. Вы хотите захватить территорию ${territory.name}? Это не требует участия армии. (Тратит 1 действие)`)) {
+                        this.captureTerritory(territory, 'player');
+                        this.addNews(`Земли ${territory.name} присоединены к империи.`, 'correct');
+                        pm.actionsLeft--;
+                        this.updateActionsUI();
+                        this.refreshMapStyles();
+                    }
+                    return;
+                }
+
+                // КЛИК ПО СЕРОЙ ЗОНЕ (Чужая страна, мир)
+                if (rel === 'neutral' && territory.owner !== 'player' && territory.owner !== 'neutral') {
+                    this.showNotification("Вы не можете напасть на эту страну без объявления войны!", "warning");
+                    return;
+                }
+
+                if (rel === 'war') {
+                    if (pm.actionsLeft <= 0) {
+                        this.showNotification("Недостаточно очков действий для атаки!", "warning");
+                        return;
+                    }
+
+                    // Проверяем соседство
+                    const neighbors = this.state.politicalMode.territoryNeighbors[territory.id] || [];
+                    const isAdjacentToPlayer = neighbors.some(nid => {
+                        const nt = this.state.territories.find(t => t.id === nid);
+                        return nt && nt.owner === 'player';
+                    });
+
+                    // Проверяем флот
+                    let hasNavy = false;
+                    if (pm.navy) {
+                        hasNavy = Object.values(pm.navy).some(count => count > 0);
+                    }
+
+                    if (isAdjacentToPlayer) {
+                        territory.isOverseasAttack = false;
+                        this.openBattleModal(territory.id);
+                    } else if (hasNavy) {
+                        territory.isOverseasAttack = true;
+                        this.openBattleModal(territory.id);
+                    } else {
+                        this.showNotification("Для атаки на расстоянии необходим Морской флот!", "warning");
+                    }
+                }
+                return;
+            }
+
+
+            pm.selectedTerritory = territory;
+
+            // Определяем, кто владелец для отображения
+            let ownerName = 'Нейтральная территория';
+            let ownerColor = '#999';
+            if (territory.owner === 'player') {
+                ownerName = this.state.politicalMode.playerCountry || territory.feature.properties.historicalOwner || 'Ваша империя';
+                ownerColor = '#4caf50';
+            } else if (territory.owner && territory.owner.startsWith('bot')) {
+                const bot = this.state.politicalMode.botCountries.find(b => b.name === territory.owner);
+                if (bot) ownerName = bot.empireName;
+                else ownerName = territory.feature.properties.historicalOwner;
+                ownerColor = '#ef5350';
+            } else if (territory.owner && territory.owner !== 'neutral') {
+                ownerName = territory.feature.properties.historicalOwner;
+                ownerColor = '#ff9800';
+            }
+
+            territory.element.bindPopup(`<div style="text-align:center;"><b>${territory.name}</b><br>Владелец: <span style="color:${ownerColor}; font-weight:bold;">${ownerName}</span><br>Гарнизон: 🛡️ ${territory.army || 0} дивизий</div>`).openPopup();
+
+            if (typeof this.updateTerritoryInfoUI === 'function') {
+                this.updateTerritoryInfoUI();
+            }
+            return;
+        }
+
+        // --- Старая логика (Одиночная игра) ---
         // Если игрок уже отвечает на вопрос, игнорируем клики
         if (this.state.isAnswering) return;
 
@@ -3505,6 +4140,136 @@ const game = {
 
         // Генерируем вопрос
         this.nextQuestion();
+    },
+
+    updateTerritoryInfoUI() {
+        const pm = this.state.politicalMode;
+        if (!pm.selectedTerritory) return;
+        const t = pm.selectedTerritory;
+
+        let displayName = t.name || 'Неизвестно';
+        if (t.feature && t.feature.properties.countryName) {
+            displayName = `${displayName} (${t.feature.properties.countryName})`;
+        }
+        document.getElementById('selectedTerritoryName').textContent = displayName;
+        let ownerText = 'Нейтрал';
+        if (t.owner === 'player') ownerText = `Игрок (${pm.playerCountry})`;
+        else if (t.owner && t.owner.startsWith('bot')) ownerText = t.owner;
+        document.getElementById('selectedTerritoryOwner').textContent = `Владелец: ${ownerText}`;
+
+        const resType = pm.territoryResources[t.id];
+        const resLabels = { wood: 'Дерево', coal: 'Уголь', iron: 'Железо', oil: 'Нефть', gold: 'Золото', food: 'Еда', leather: 'Кожа' };
+        document.getElementById('selectedTerritoryResource').textContent = resType ? resLabels[resType] : '-';
+
+        document.getElementById('selectedTerritoryArmy').textContent = t.army || 0;
+
+        const actionsContainer = document.getElementById('territoryActions');
+        actionsContainer.innerHTML = ''; // Очистка
+
+        if (t.owner === 'player') {
+            const recruitBtn = document.createElement('button');
+            recruitBtn.className = 'historical-btn';
+            recruitBtn.innerHTML = '<i class="fas fa-plus"></i> Нанять армию (Цена: 150 Еды, 15 Кожи)';
+            recruitBtn.onclick = () => {
+                if (pm.resources.food >= 150 && pm.resources.leather >= 15) {
+                    pm.resources.food -= 150;
+                    pm.resources.leather -= 15;
+                    t.army = (t.army || 0) + 10; // +10 солдат
+                    this.playSound('click');
+                    this.updateTerritoryInfoUI();
+                    this.updateResourceUI();
+                } else {
+                    this.playSound('wrong');
+                    this.showNotification('Недостаточно ресурсов для найма армии!');
+                }
+            };
+            actionsContainer.appendChild(recruitBtn);
+        } else {
+            actionsContainer.innerHTML = '<p style="color: #ccc; font-size: 0.9rem;">Выберите свою территорию по соседству, а затем кликните сюда для атаки.</p>';
+        }
+    },
+
+    calculateTotalArmyPower() {
+        if (!this.state.politicalMode.enabled) return 0;
+        let total = 0;
+        const pm = this.state.politicalMode;
+        for (let unitId in pm.army) {
+            const unit = this.units.find(u => u.id === unitId);
+            if (unit) total += pm.army[unitId] * unit.power;
+        }
+        return total || 10; // Base power if empty
+    },
+
+    calculateTotalNavyPower() {
+        if (!this.state.politicalMode.enabled) return 0;
+        let total = 0;
+        const pm = this.state.politicalMode;
+        if (!pm.navy) return 0;
+        for (let unitId in pm.navy) {
+            const unit = this.navyUnits ? this.navyUnits[unitId] : null;
+            if (unit) total += pm.navy[unitId] * unit.power;
+        }
+        return total;
+    },
+
+    async executeAttack(source, target) {
+        if (!source || !target || source.owner === target.owner) return;
+
+        let attackerPower = 0;
+        let defenderPower = target.army || 10;
+
+        if (source.owner === 'player') {
+            if (target.isOverseasAttack) {
+                attackerPower = this.calculateTotalNavyPower();
+            } else {
+                attackerPower = this.calculateTotalArmyPower();
+            }
+        } else {
+            attackerPower = source.army || 10;
+        }
+
+        // Random factors
+        const finalAttackerPower = attackerPower * (Math.random() * 0.5 + 0.75);
+        const finalDefenderPower = defenderPower * (Math.random() * 0.5 + 0.85);
+
+        if (finalAttackerPower > finalDefenderPower) {
+            // Success
+            if (source.owner === 'player') {
+                this.addNews(`Захвачена территория: ${target.feature.properties.name}`, 'capture');
+                this.playSound('correct');
+                this.showNotification(`Победа! Территория ${target.feature.properties.name} захвачена.`, 'success');
+            }
+
+            target.owner = source.owner;
+            target.captured = true;
+            target.army = Math.floor(attackerPower / 10); // Simple garrison for bots
+
+            this.captureTerritory(target, source.owner);
+
+            // Player losses (random units)
+            if (source.owner === 'player') this.applyArmyLosses(0.05); // 5% loss on success
+        } else {
+            // Failure
+            if (source.owner === 'player') {
+                this.addNews(`Атака на ${target.feature.properties.name} провалилась`, 'war');
+                this.playSound('wrong');
+                this.showNotification(`Поражение! Атака на ${target.feature.properties.name} отбита врагом.`, 'error');
+                this.applyArmyLosses(0.2); // 20% loss on failure
+            }
+        }
+
+        this.updateTerritoryInfoUI();
+    },
+
+    applyArmyLosses(percent) {
+        const pm = this.state.politicalMode;
+        for (let unitId in pm.army) {
+            if (pm.army[unitId] > 0) {
+                const losses = Math.ceil(pm.army[unitId] * percent * (Math.random() * 0.5 + 0.75));
+                pm.army[unitId] = Math.max(0, pm.army[unitId] - losses);
+            }
+        }
+        this.updateArmyUI();
     },
 
     // Placeholder to keep structure
@@ -3558,18 +4323,17 @@ const game = {
             if (filteredQuestions.length === 0) {
                 // Попробуем взять из всех доступных, которые еще не были использованы (игнорируя период)
                 filteredQuestions = this.questions.filter(q => !this.state.usedQuestions.has(q.id));
+
             }
 
-            // Если совсем всё кончилось
+            // If completely exhausted, allow repeats
             if (filteredQuestions.length === 0) {
-                // Reset provided logic only as last resort or notify user
                 console.warn("All questions used!");
-                // For now, allow repeats only if absolutely exhausted
                 filteredQuestions = this.questions;
             }
         }
 
-        // Выбираем случайный вопрос
+        // Select random question
         const randomIndex = Math.floor(Math.random() * filteredQuestions.length);
         const question = filteredQuestions[randomIndex];
 
@@ -3578,31 +4342,24 @@ const game = {
         return question;
     },
 
-    // Следующий вопрос
+    // Next question
     nextQuestion() {
-        // Скрываем объяснение
+        // Hide explanation
         document.getElementById('explanationCard').style.display = 'none';
 
-        // Получаем новый вопрос
         const nextQ = this.getRandomQuestion();
-
-        if (!nextQ) {
-            this.endGame();
-            return;
-        }
+        if (!nextQ) { this.endGame(); return; }
 
         this.state.currentQuestion = nextQ;
         this.state.totalQuestions++;
         this.state.questionStartTime = Date.now();
 
-        // Обновляем номер вопроса
         document.getElementById('questionNumber').textContent = this.state.totalQuestions;
-
-        // Обновляем текст вопроса
         document.getElementById('questionText').textContent = this.state.currentQuestion.text;
 
         // Обновляем мета-информацию
         const periodNames = {
+
             antiquity: 'Античность',
             middle_ages: 'Средневековье',
             renaissance: 'Ренессанс',
@@ -3675,6 +4432,10 @@ const game = {
     submitAnswer(answerIndex) {
         if (!this.state.gameActive || !this.state.currentQuestion) return;
 
+        // Отключаем кнопки, чтобы нельзя было нажать дважды
+        const answerButtons = document.querySelectorAll('.answer-btn');
+        answerButtons.forEach(btn => btn.disabled = true);
+
         clearInterval(this.state.timer);
 
         const isCorrect = answerIndex === this.state.currentQuestion.correct;
@@ -3699,6 +4460,9 @@ const game = {
             if (originalIndex === selectedIndex) {
                 button.classList.add('selected');
             }
+
+            // На всякий случай убеждаемся, что всё отключено
+            button.disabled = true;
         });
 
         // Обновляем статистику
@@ -3718,7 +4482,8 @@ const game = {
             }
         }
 
-        this.state.isAnswering = false; // Unlock functionally
+        // Блокируем новые ответы, пока показывается объяснение
+        this.state.isAnswering = true;
 
         // Рассчитываем очки
         const timeTaken = 30 - this.state.timeLeft;
@@ -3740,6 +4505,11 @@ const game = {
                 explanation: this.state.currentQuestion.explanation
             });
         }
+
+        // Автоматический переход к следующему вопросу/выбору через 3 секунды
+        this._autoTransitionTimeout = setTimeout(() => {
+            this.proceedToNextRound();
+        }, 3500);
     },
 
     // Захват территории
@@ -3760,45 +4530,59 @@ const game = {
         territory.owner = owner;
 
         // Визуальная обратная связь
-        if (owner === 'player') {
-            territory.element.setStyle({
-                color: '#2e7d32',
-                fillColor: '#4caf50',
-                fillOpacity: 0.6,
-                weight: 3,
-                dashArray: ''
-            });
-            territory.element.bindPopup(`<b>${territory.name}</b><br>Статус: <span style="color:#4caf50; font-weight:bold;">ЗАХВАЧЕНА ВАМИ</span>`);
-            this.state.capturedTerritories++;
+        if (this.gameMode === 'political') {
+            this.updateTerritoryStyle(territory.id);
+            if (owner === 'player') {
+                territory.element.bindPopup(`<b>${territory.name}</b><br>Статус: <span style="color:#4caf50; font-weight:bold;">ЗАХВАЧЕНА ВАМИ</span>`);
+                this.state.capturedTerritories++;
+            } else {
+                territory.element.bindPopup(`<b>${territory.name}</b><br>Статус: <span style="color:#ef5350; font-weight:bold;">ЗАХВАЧЕНА БОТОМ</span>`);
+                this.state.botTerritories++;
+            }
         } else {
-            territory.element.setStyle({
-                color: '#c62828',
-                fillColor: '#ef5350',
-                fillOpacity: 0.6,
-                weight: 3,
-                dashArray: ''
-            });
-            territory.element.bindPopup(`<b>${territory.name}</b><br>Статус: <span style="color:#ef5350; font-weight:bold;">ЗАХВАЧЕНА БОТОМ</span>`);
-            this.state.botTerritories++;
+            if (owner === 'player') {
+                territory.element.setStyle({
+                    color: '#2e7d32',
+                    fillColor: '#4caf50',
+                    fillOpacity: 0.6,
+                    weight: 3,
+                    dashArray: ''
+                });
+                territory.element.bindPopup(`<b>${territory.name}</b><br>Статус: <span style="color:#4caf50; font-weight:bold;">ЗАХВАЧЕНА ВАМИ</span>`);
+                this.state.capturedTerritories++;
+            } else {
+                territory.element.setStyle({
+                    color: '#c62828',
+                    fillColor: '#ef5350',
+                    fillOpacity: 0.6,
+                    weight: 3,
+                    dashArray: ''
+                });
+                territory.element.bindPopup(`<b>${territory.name}</b><br>Статус: <span style="color:#ef5350; font-weight:bold;">ЗАХВАЧЕНА БОТОМ</span>`);
+                this.state.botTerritories++;
+            }
         }
 
         document.getElementById('capturedCount').textContent = this.state.capturedTerritories;
-        // Можно добавить отдельный счетчик для бота в UI
-
-        territory.element.openPopup();
-
-        // Проверяем окончание игры и фиксированный порог победы
-        const thresholds = { small: 11, medium: 17, large: 26 };
-        const winThreshold = thresholds[this.settings.mapSize] || 17;
-
-        if (this.state.capturedTerritories >= winThreshold || this.state.botTerritories >= winThreshold) {
-            this.endGame();
-            return;
+        // Попап открываем только в одиночной игре (в политическом режиме openPopup вызывает нежелательное панирование камеры)
+        if (this.gameMode !== 'political') {
+            territory.element.openPopup();
         }
 
-        const totalCaptured = this.state.capturedTerritories + this.state.botTerritories;
-        if (totalCaptured >= this.state.totalTerritories) {
-            this.endGame();
+        // Проверяем окончание игры и фиксированный порог победы (только в одиночном режиме)
+        if (this.gameMode !== 'political') {
+            const thresholds = { small: 11, medium: 17, large: 26 };
+            const winThreshold = thresholds[this.settings.mapSize] || 17;
+
+            if (this.state.capturedTerritories >= winThreshold || this.state.botTerritories >= winThreshold) {
+                this.endGame();
+                return;
+            }
+
+            const totalCaptured = this.state.capturedTerritories + this.state.botTerritories;
+            if (totalCaptured >= this.state.totalTerritories) {
+                this.endGame();
+            }
         }
 
         // Clear target if player captured
@@ -3811,6 +4595,43 @@ const game = {
     botTurn() {
         if (!this.state.gameActive) return;
 
+        if (this.state.politicalMode && this.state.politicalMode.enabled) {
+            const pm = this.state.politicalMode;
+            // Hearts of Iron style AI
+            pm.botCountries.forEach(bot => {
+                const botTerritories = this.state.territories.filter(t => t.owner === bot.name);
+                if (botTerritories.length === 0) return; // Бот уничтожен
+
+                // 1. Найм войск (если хватает ресурсов)
+                if (bot.resources.food >= 150 && bot.resources.leather >= 15) {
+                    bot.resources.food -= 150;
+                    bot.resources.leather -= 15;
+                    // Нанимаем в случайной провинции
+                    const randT = botTerritories[Math.floor(Math.random() * botTerritories.length)];
+                    randT.army = (randT.army || 0) + 10;
+                }
+
+                // 2. Атака соседей
+                botTerritories.forEach(sourceT => {
+                    const neighbors = pm.territoryNeighbors[sourceT.id] || [];
+                    neighbors.forEach(nId => {
+                        const targetT = this.state.territories.find(t => t.id === nId);
+                        if (targetT && targetT.owner !== bot.name) {
+                            const sourceArmy = sourceT.army || 0;
+                            const targetArmy = targetT.army || 0;
+
+                            // Бот атакует, если имеет преимущество в 1.5 раза
+                            if (sourceArmy > targetArmy * 1.5 && sourceArmy > 15) {
+                                this.executeAttack(sourceT, targetT);
+                            }
+                        }
+                    });
+                });
+            });
+            return;
+        }
+
+        // --- Старая логика (Одиночная игра) ---
         // Бот может атаковать нейтральные или принадлежащие игроку территории
         const targets = this.state.territories.filter(t => t.owner !== 'bot');
 
@@ -3943,27 +4764,30 @@ const game = {
         this.showScreen('resultsScreen');
     },
 
-    // Сохранение статистики
+    // Сохранение статистики (напрямую в Supabase)
     async saveStatistics() {
-        const stats = JSON.parse(localStorage.getItem('historyGameStats') || '{}');
-
-        stats.totalGames = (stats.totalGames || 0) + 1;
-        stats.totalTerritories = (stats.totalTerritories || 0) + this.state.capturedTerritories;
-        stats.correctAnswersTotal = (stats.correctAnswersTotal || 0) + this.state.correctAnswers;
-        stats.totalQuestions = (stats.totalQuestions || 0) + this.state.totalQuestions;
-        stats.score = (stats.score || 0) + this.state.score;
-        
-        // Пересчитываем процент правильных (строка для UI)
-        stats.correctAnswers = stats.totalQuestions > 0 ? 
-            Math.round((stats.correctAnswersTotal / stats.totalQuestions) * 100) + "%" : "0%";
-
-        localStorage.setItem('historyGameStats', JSON.stringify(stats));
-        this.updateStats();
-
-        // Если пользователь вошел, синхронизируем с Supabase
-        if (this.user) {
-            await this.syncStats();
+        // Определяем режим игры
+        let gameMode = 'single';
+        if (this.state.politicalMode && this.state.politicalMode.enabled) {
+            gameMode = 'political';
+        } else if (this.state.roomMode) {
+            gameMode = 'online';
         }
+
+        const results = {
+            score: this.state.score,
+            territories: this.state.capturedTerritories,
+            correct: this.state.correctAnswers,
+            total: this.state.totalQuestions,
+            gameMode: gameMode
+        };
+
+        // Если пользователь вошёл — сохраняем в облако
+        if (this.user) {
+            await this.saveGameResultsToCloud(results);
+        }
+        // Обновляем UI (updateStats подтянет данные из userCloudStats)
+        this.updateStats();
     },
 
     // Перезапуск игры
@@ -4100,23 +4924,14 @@ const game = {
 window.addEventListener('DOMContentLoaded', () => {
     game.init();
 
-    // Political Game Button
-    document.getElementById('startPoliticalGame')?.addEventListener('click', () => {
-        game.resetGameState();
-        game.generateMap();
-        game.showScreen('countrySelectionScreen');
-    });
-
     // Country Selection handled dynamically in updateCountrySelectionUI
 
-    // Trade Popup Buttons
-    document.getElementById('acceptTradeBtn').addEventListener('click', () => {
-        game.acceptTrade();
-    });
-    document.getElementById('declineTradeBtn').addEventListener('click', () => {
-        game.declineTrade();
-    });
-
+    const openBarracksBtn = document.getElementById('openBarracksBtn');
+    if (openBarracksBtn) {
+        openBarracksBtn.addEventListener('click', () => {
+            if (game.openBarracks) game.openBarracks();
+        });
+    }
     // Автовыбор континента и сложности по умолчанию
     setTimeout(() => {
         const defaultContinent = document.querySelector('[data-continent="europe"]');
@@ -4134,63 +4949,691 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 // ===== POLITICAL MODE FUNCTIONS =====
-game.startPoliticalGame = function (playerCountry) {
-    // Включаем полноэкранный режим UI
-    document.body.classList.add('political-mode-active');
-
-    // Карта в политической игре всегда стабильно 20 века
-    this.settings.period = '20th_century';
+game.startPoliticalGame = async function (playerCountry) {
+    // 1. Показываем загрузочный экран
+    this.showLoadingTransition(true, "Инициализация державы", "Сброс состояния...");
 
     // Очищаем состояние перед началом
     this.resetGameState();
+    this.updateLoadingProgress(20, "Настройка интерфейса...");
 
-    // Генерируем карту заново с нужным периодом
-    this.generateMap();
+    // Сразу показываем нужные панели и скрываем викторину
+    document.getElementById('resourcePanel').style.display = 'block';
+    document.getElementById('questionContainer').style.display = 'none';
+    if (document.getElementById('territoryInfoContainer')) {
+        document.getElementById('territoryInfoContainer').style.display = 'block';
+    }
+    const prodBtns = document.getElementById('productionBtns');
+    if (prodBtns) prodBtns.style.display = 'flex';
+
+    // Включаем полноэкранный режим UI (ПОСЛЕ resetGameState)
+    document.body.classList.add('political-mode-active');
+
+    // Переключаемся на экран игры ДО генерации карты, чтобы Leaflet корректно считал размеры
+    this.showScreen('gameScreen');
+    this.updateLoadingProgress(40, "Генерация глобальной карты...");
+
+    // Генерируем карту и ждем загрузки всех данных
+    await this.generateMap();
+    this.updateLoadingProgress(60, "Настройка политических границ...");
 
     this.state.politicalMode.enabled = true;
     this.state.politicalMode.playerCountry = playerCountry;
-    this.state.politicalMode.stars = 100;
-    this.state.politicalMode.resources = { wood: 0, coal: 0, iron: 0, oil: 0, gold: 0 };
+    this.state.politicalMode.resources = { wood: 0, coal: 0, iron: 0, oil: 0, gold: 0, coins: 50, food: 0, leather: 0, manpower: 0 };
+    this.state.politicalMode.actionsLeft = 4;
+    this.state.politicalMode.activeDeployments = [];
+    this.state.politicalMode.barracksMarkers = [];
+    this.state.politicalMode.resourceLevels = { food: 1, leather: 1, wood: 1, coal: 1, iron: 1, oil: 1, gold: 1 };
+    this.state.politicalMode.botCountries = [];
 
     // Ждем загрузки территорий для захвата
     const checkAndStart = setInterval(() => {
         if (this.state.territories.length > 0) {
             clearInterval(checkAndStart);
 
-            // Find and auto-capture player's starting country
-            const startTerritory = this.state.territories.find(t => t.name === playerCountry);
-            if (startTerritory) {
-                this.captureTerritory(startTerritory, 'player');
-            }
+            this.updateLoadingProgress(80, "Развертывание подразделений...");
 
-            // Initialize political systems
+            // 1. Инициализируем территории игрока
+            const playerTerritories = this.state.territories.filter(t => t.feature.properties.historicalOwner === playerCountry);
+            playerTerritories.forEach(t => {
+                t.owner = 'player';
+                t.captured = true;
+                t.army = 50; // Начальная армия игрока
+                this.updateTerritoryStyle(t.id);
+            });
+
+            // 2. Инициализируем ботов для всех остальных исторических владельцев
+            const allOwners = new Set(this.state.territories.map(t => t.feature.properties.historicalOwner));
+            let botIndex = 1;
+
+            allOwners.forEach(owner => {
+                if (owner !== playerCountry && owner !== 'Свободная земля' && owner !== 'Неизвестная страна') {
+                    const botName = 'bot_' + botIndex++;
+                    const botTerritories = this.state.territories.filter(t => t.feature.properties.historicalOwner === owner);
+
+                    botTerritories.forEach(t => {
+                        t.owner = botName;
+                        t.captured = true;
+                        t.army = 20; // Начальная армия бота
+                        this.updateTerritoryStyle(t.id);
+                    });
+
+                    this.state.politicalMode.botCountries.push({
+                        name: botName,
+                        empireName: owner,
+                        resources: { wood: 100, coal: 100, iron: 100, oil: 100, gold: 100, food: 200, leather: 200 },
+                        manpower: 100,
+                        army: { soldier: 15, tank: 0, fighter: 0, bomber: 0, at_gun: 0, howitzer: 0 }
+                    });
+                }
+            });
+
+            // 3. Свободные земли
+            this.state.territories.forEach(t => {
+                if (!t.owner) {
+                    t.owner = 'neutral';
+                    t.army = 5;
+                    this.updateTerritoryStyle(t.id);
+                }
+            });
+
+            // 4. Инициализация систем
             this.initializeAdjacency();
             this.assignResources();
             this.startResourceProduction();
             this.startMaintenanceCycle();
-            this.startTradeSystem();
-
-            // Show resource panel
-            document.getElementById('resourcePanel').style.display = 'block';
+            if (this.initBarracksMap) this.initBarracksMap();
+            if (this.initPorts) this.initPorts();
             this.updateResourceUI();
+            this.updateActionsUI();
+            this.startBotCycle();
 
-            this.showScreen('gameScreen');
-            this.state.gameActive = true;
+            this.updateLoadingProgress(100, "Мир готов к завоеванию!");
 
-            // Force map to recalculate size and fit bounds with proper zoom
-            if (this.state.map) {
+            // 5. Убираем загрузочный экран с задержкой для плавности
+            setTimeout(() => {
+                this.showLoadingTransition(false);
+            }, 800);
+
+            // Находим столицу игрока и центрируем
+            if (playerTerritories.length > 0) {
+                const group = L.featureGroup(playerTerritories.map(t => t.element));
+                this.state.map.fitBounds(group.getBounds(), { padding: [150, 150] });
+
+                // Устанавливаем зум как на скриншоте (обычно 3 или 4 для такого вида)
                 setTimeout(() => {
-                    this.state.map.invalidateSize();
-                    if (this.state.geoJsonLayer) {
-                        const bounds = this.state.geoJsonLayer.getBounds();
-                        if (bounds.isValid()) {
-                            this.state.map.fitBounds(bounds, { padding: [20, 20] });
-                        }
+                    if (this.state.map.getZoom() < 3) {
+                        this.state.map.setZoom(3);
                     }
-                }, 300);
+                }, 500);
             }
         }
     }, 100);
+};
+
+game.initPorts = function() {
+    if (typeof historicalPorts1939 === 'undefined') return;
+    
+    // Очищаем старые порты, если есть
+    if (this.state.portMarkers) {
+        this.state.portMarkers.forEach(m => this.state.map.removeLayer(m));
+    }
+    this.state.portMarkers = [];
+    
+    // Создаем иконку якоря
+    const anchorIcon = L.divIcon({
+        className: 'port-anchor-icon',
+        html: '<i class="fas fa-anchor" style="color: #fff; font-size: 14px; text-shadow: 1px 1px 3px rgba(0,0,0,0.8), -1px -1px 3px rgba(0,0,0,0.8), 1px -1px 3px rgba(0,0,0,0.8), -1px 1px 3px rgba(0,0,0,0.8);"></i>',
+        iconSize: [20, 20],
+        iconAnchor: [10, 10]
+    });
+    
+    historicalPorts1939.forEach(port => {
+        const marker = L.marker([port.lat, port.lng], {
+            icon: anchorIcon,
+            zIndexOffset: 1000 // Чтобы якорь был поверх территорий
+        }).bindTooltip(`<b>${port.name}</b><br><span style="font-size:0.8em; color:#aaa;">Порт (${port.region})</span>`, {
+            direction: 'top',
+            offset: [0, -10],
+            className: 'glass-tooltip'
+        });
+        
+        marker.on('click', () => {
+            if (game.state.politicalMode && game.state.politicalMode.enabled) {
+                let ownedByPlayer = false;
+                const playerTerritories = game.state.territories.filter(t => t.owner === 'player');
+                for (let t of playerTerritories) {
+                    if (game.isPointInTerritory(port.lat, port.lng, t)) {
+                        ownedByPlayer = true;
+                        break;
+                    }
+                }
+
+                if (ownedByPlayer) {
+                    game.openNavyModal();
+                } else {
+                    game.showNotification("Это чужой порт! Сначала захватите территорию.", "warning");
+                    if (game.playSound) game.playSound('wrong');
+                }
+            }
+        });
+        
+        marker.addTo(this.state.map);
+        this.state.portMarkers.push(marker);
+    });
+};
+
+game.isPointInTerritory = function(lat, lng, territory) {
+    if (!territory.feature || !territory.feature.geometry) return false;
+    const geom = territory.feature.geometry;
+    const pt = [lng, lat]; // GeoJSON is [lng, lat]
+
+    const pointInPoly = function(point, polygon) {
+        let x = point[0], y = point[1];
+        let inside = false;
+        for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+            let xi = polygon[i][0], yi = polygon[i][1];
+            let xj = polygon[j][0], yj = polygon[j][1];
+            let intersect = ((yi > y) != (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+            if (intersect) inside = !inside;
+        }
+        return inside;
+    };
+
+    let isInside = false;
+    if (geom.type === 'Polygon') {
+        isInside = pointInPoly(pt, geom.coordinates[0]);
+    } else if (geom.type === 'MultiPolygon') {
+        for (let poly of geom.coordinates) {
+            if (pointInPoly(pt, poly[0])) {
+                isInside = true;
+                break;
+            }
+        }
+    }
+    
+    if (isInside) return true;
+
+    // Если порт находится чуть-чуть в море (за границей полигона),
+    // проверяем расстояние до ближайшей вершины границы (допуск ~0.5 градуса)
+    const tolerance = 0.5;
+    const checkProximity = function(point, polygon) {
+        for (let i = 0; i < polygon.length; i++) {
+            let dx = point[0] - polygon[i][0];
+            let dy = point[1] - polygon[i][1];
+            if (Math.sqrt(dx*dx + dy*dy) < tolerance) return true;
+        }
+        return false;
+    };
+
+    if (geom.type === 'Polygon') {
+        return checkProximity(pt, geom.coordinates[0]);
+    } else if (geom.type === 'MultiPolygon') {
+        for (let poly of geom.coordinates) {
+            if (checkProximity(pt, poly[0])) return true;
+        }
+    }
+
+    return false;
+};
+
+// ====== NAVY SYSTEM ======
+game.navyUnits = {
+    sub_m: { id: 'sub_m', name: 'Подводная лодка (М)', icon: 'fa-ship', power: 20, cost: { wood: 600, iron: 500, coal: 300, food: 400, leather: 150, oil: 290 }, coinCost: 0, turnsToBuild: 1, desc: 'Базовая подводная лодка малого класса.' },
+    sub_b: { id: 'sub_b', name: 'Подводная лодка (Б)', icon: 'fa-ship', power: 30, cost: { wood: 620, iron: 560, coal: 390, food: 480, leather: 190, oil: 310 }, coinCost: 70, turnsToBuild: 2, desc: 'Улучшенная подводная лодка большого класса.' },
+    sub_c: { id: 'sub_c', name: 'Крейсерская подлодка', icon: 'fa-anchor', power: 100, cost: { wood: 900, iron: 600, coal: 450, food: 590, leather: 0, oil: 400 }, coinCost: 200, turnsToBuild: 2, desc: 'Мощная крейсерская подводная лодка для дальних походов.' },
+    landing_ship: { id: 'landing_ship', name: 'Десантный корабль', icon: 'fa-ship', power: 70, cost: { wood: 650, iron: 400, coal: 300, food: 400, leather: 0, oil: 280 }, coinCost: 150, turnsToBuild: 1, desc: 'Корабль для высадки десанта на вражеские берега.' },
+    anti_sub: { id: 'anti_sub', name: 'Противолодочный корабль', icon: 'fa-ship', power: 130, cost: { wood: 950, iron: 690, coal: 540, food: 640, leather: 0, oil: 510 }, coinCost: 220, turnsToBuild: 2, desc: 'Тяжелый корабль для охоты на подлодки и защиты флота.' }
+};
+
+game.openNavyModal = function() {
+    this.switchNavyTab('comp');
+    this.renderNavyUI();
+    document.getElementById('navyModal').style.display = 'flex';
+};
+
+game.switchNavyTab = function(tab) {
+    document.getElementById('tabNavyComp').classList.remove('active');
+    document.getElementById('tabNavyBuild').classList.remove('active');
+    document.getElementById('navyCompSection').style.display = 'none';
+    document.getElementById('navyBuildSection').style.display = 'none';
+
+    if (tab === 'comp') {
+        document.getElementById('tabNavyComp').classList.add('active');
+        document.getElementById('navyCompSection').style.display = 'flex';
+    } else {
+        document.getElementById('tabNavyBuild').classList.add('active');
+        document.getElementById('navyBuildSection').style.display = 'flex';
+    }
+};
+
+game.renderNavyUI = function() {
+    const pm = this.state.politicalMode;
+    if (!pm.navy) pm.navy = { sub_m: 0, sub_b: 0, sub_c: 0, landing_ship: 0, anti_sub: 0 };
+    if (!pm.productionQueue) pm.productionQueue = [];
+
+    // Render Composition
+    const compList = document.getElementById('navyList');
+    compList.innerHTML = '';
+    let totalNavyPower = 0;
+    for (let key in pm.navy) {
+        if (pm.navy[key] > 0) {
+            const unitDef = this.navyUnits[key];
+            const div = document.createElement('div');
+            div.className = 'army-unit-card';
+            div.innerHTML = `
+                <i class="fas ${unitDef.icon} army-unit-icon"></i>
+                <div class="army-unit-name">${unitDef.name}</div>
+                <div class="army-unit-count">Кол-во: ${pm.navy[key]}</div>
+                <div style="font-size: 0.8rem; color: #4caf50;">Сила: +${unitDef.power * pm.navy[key]}</div>
+            `;
+            compList.appendChild(div);
+            totalNavyPower += unitDef.power * pm.navy[key];
+        }
+    }
+    if (compList.innerHTML === '') compList.innerHTML = '<p style="color:#aaa;">Ваш флот пуст. Заложите корабли на Верфи.</p>';
+    else {
+        const powerDiv = document.createElement('div');
+        powerDiv.style = "grid-column: 1 / -1; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 10px; margin-top: 10px; color: #d4af37;";
+        powerDiv.innerHTML = `<b>Общая сила флота: ${totalNavyPower}</b>`;
+        compList.appendChild(powerDiv);
+    }
+
+    // Render Queue
+    const queueList = document.getElementById('navyQueueList');
+    queueList.innerHTML = '';
+    let hasNavyInQueue = false;
+    pm.productionQueue.forEach((item, index) => {
+        if (this.navyUnits[item.unitId]) {
+            hasNavyInQueue = true;
+            const unitDef = this.navyUnits[item.unitId];
+            const div = document.createElement('div');
+            div.className = 'queue-item';
+            div.innerHTML = `
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <i class="fas ${unitDef.icon}"></i>
+                    <span>${unitDef.name}</span>
+                </div>
+                <div>
+                    <span style="color: #ff9800; margin-right: 15px;">Осталось ходов: ${item.turnsLeft}</span>
+                    <button class="historical-btn btn-secondary" onclick="game.cancelNavyProduction(${index})">Отмена</button>
+                </div>
+            `;
+            queueList.appendChild(div);
+        }
+    });
+    if (!hasNavyInQueue) queueList.innerHTML = '<p style="color:#aaa;">Очередь постройки пуста.</p>';
+
+    // Render Build list
+    const buildList = document.getElementById('availableNavyList');
+    buildList.innerHTML = '';
+    if (!pm.navyModernization) pm.navyModernization = [];
+
+    for (let key in this.navyUnits) {
+        const unitDef = this.navyUnits[key];
+        const isUnlocked = pm.navyModernization.includes(key) || unitDef.coinCost === 0;
+
+        if (isUnlocked) {
+            const canAfford = 
+                (pm.resources.wood >= unitDef.cost.wood) &&
+                (pm.resources.iron >= unitDef.cost.iron) &&
+                (pm.resources.coal >= unitDef.cost.coal) &&
+                (pm.resources.food >= unitDef.cost.food) &&
+                (pm.resources.leather >= (unitDef.cost.leather || 0)) &&
+                (pm.resources.oil >= unitDef.cost.oil);
+
+            const card = document.createElement('div');
+            card.className = `army-hire-card ${!canAfford ? 'locked' : ''}`;
+            card.style.background = 'linear-gradient(135deg, rgba(30,60,90,0.8), rgba(15,30,50,0.9))';
+            card.style.border = '1px solid rgba(100, 150, 255, 0.3)';
+            card.style.boxShadow = '0 4px 15px rgba(0,0,0,0.5)';
+            card.innerHTML = `
+                <div class="army-hire-header" style="background: rgba(0,0,0,0.4); padding: 10px; border-radius: 5px; color: #4fc3f7;">
+                    <i class="fas ${unitDef.icon}"></i>
+                    <span>${unitDef.name}</span>
+                </div>
+                <p style="font-size: 0.8rem; color: #b0bec5; margin-bottom: 10px; min-height: 35px;">${unitDef.desc}</p>
+                <div class="army-hire-stats" style="background: rgba(0,0,0,0.2); padding: 5px; border-radius: 5px;">
+                    <div><i class="fas fa-fist-raised" style="color:#ef5350;"></i> Сила: <span style="color: #4caf50; font-weight: bold;">${unitDef.power}</span></div>
+                    <div><i class="fas fa-hourglass-half" style="color:#ffb300;"></i> Ходов: ${unitDef.turnsToBuild}</div>
+                </div>
+                <div class="army-hire-cost" style="display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px;">
+                    ${unitDef.cost.wood > 0 ? `<div class="cost-item"><i class="fas fa-tree"></i> ${unitDef.cost.wood}</div>` : ''}
+                    ${unitDef.cost.iron > 0 ? `<div class="cost-item"><i class="fas fa-hammer"></i> ${unitDef.cost.iron}</div>` : ''}
+                    ${unitDef.cost.coal > 0 ? `<div class="cost-item"><i class="fas fa-fire"></i> ${unitDef.cost.coal}</div>` : ''}
+                    ${unitDef.cost.oil > 0 ? `<div class="cost-item"><i class="fas fa-oil-can"></i> ${unitDef.cost.oil}</div>` : ''}
+                    ${unitDef.cost.food > 0 ? `<div class="cost-item"><i class="fas fa-wheat"></i> ${unitDef.cost.food}</div>` : ''}
+                    ${(unitDef.cost.leather || 0) > 0 ? `<div class="cost-item"><i class="fas fa-paw"></i> ${unitDef.cost.leather}</div>` : ''}
+                </div>
+                <button class="historical-btn btn-primary" style="width: 100%; margin-top: 15px; background: linear-gradient(to right, #0277bd, #01579b); border:none;" onclick="game.buildNavyUnit('${key}')" ${!canAfford ? 'disabled' : ''}>
+                    <i class="fas fa-hammer"></i> Заложить на верфи
+                </button>
+            `;
+            buildList.appendChild(card);
+        } else {
+            const canAffordCoins = pm.resources.coins >= unitDef.coinCost;
+            const card = document.createElement('div');
+            card.className = `army-hire-card ${!canAffordCoins ? 'locked' : ''}`;
+            card.style.background = 'linear-gradient(135deg, rgba(60,50,30,0.8), rgba(40,30,15,0.9))';
+            card.style.border = '1px solid rgba(255, 179, 0, 0.4)';
+            card.style.boxShadow = '0 4px 15px rgba(0,0,0,0.5)';
+            card.innerHTML = `
+                <div class="army-hire-header" style="background: rgba(0,0,0,0.4); padding: 10px; border-radius: 5px; color: #ffca28;">
+                    <i class="fas fa-file-invoice" style="margin-right: 5px;"></i>
+                    <span>Чертеж: ${unitDef.name}</span>
+                </div>
+                <p style="font-size: 0.8rem; color: #b0bec5; margin-bottom: 10px; min-height: 35px;">${unitDef.desc}</p>
+                <div class="army-hire-stats" style="background: rgba(0,0,0,0.2); padding: 5px; border-radius: 5px;">
+                    <div><i class="fas fa-fist-raised" style="color:#ef5350;"></i> Сила: <span style="color: #4caf50; font-weight: bold;">${unitDef.power}</span></div>
+                    <div><i class="fas fa-coins" style="color:#ffd700;"></i> Цена: ${unitDef.coinCost}</div>
+                </div>
+                <button class="historical-btn" style="width: 100%; margin-top: 15px; background: linear-gradient(to right, #f57f17, #fbc02d); color: #000; border:none;" onclick="game.buyNavyBlueprint('${key}')" ${!canAffordCoins ? 'disabled' : ''}>
+                    <i class="fas fa-unlock"></i> Изучить чертеж
+                </button>
+            `;
+            buildList.appendChild(card);
+        }
+    }
+};
+
+game.buyNavyBlueprint = function(unitId) {
+    const pm = this.state.politicalMode;
+    const unitDef = this.navyUnits[unitId];
+    if (!unitDef) return;
+
+    if (pm.resources.coins >= unitDef.coinCost) {
+        pm.resources.coins -= unitDef.coinCost;
+        if (!pm.navyModernization) pm.navyModernization = [];
+        pm.navyModernization.push(unitId);
+
+        if (this.playSound) this.playSound('correct');
+        this.updateResourceUI();
+        this.renderNavyUI();
+        this.showNotification(`Чертежи для ${unitDef.name} успешно изучены! Теперь корабль доступен для постройки.`, 'success');
+        this.addNews(`Модернизация флота: освоен ${unitDef.name}`, 'production');
+    } else {
+        this.showNotification("Недостаточно монет для изучения чертежа!", 'error');
+        if (this.playSound) this.playSound('wrong');
+    }
+};
+
+game.buildNavyUnit = function(unitId) {
+    const pm = this.state.politicalMode;
+    const unitDef = this.navyUnits[unitId];
+
+    if (pm.resources.wood >= unitDef.cost.wood &&
+        pm.resources.iron >= unitDef.cost.iron &&
+        pm.resources.coal >= unitDef.cost.coal &&
+        pm.resources.food >= unitDef.cost.food &&
+        pm.resources.leather >= (unitDef.cost.leather || 0) &&
+        pm.resources.oil >= unitDef.cost.oil) {
+        
+        pm.resources.wood -= unitDef.cost.wood;
+        pm.resources.iron -= unitDef.cost.iron;
+        pm.resources.coal -= unitDef.cost.coal;
+        pm.resources.food -= unitDef.cost.food;
+        pm.resources.leather -= (unitDef.cost.leather || 0);
+        pm.resources.oil -= unitDef.cost.oil;
+
+        if (!pm.productionQueue) pm.productionQueue = [];
+        pm.productionQueue.push({
+            unitId: unitId,
+            turnsLeft: unitDef.turnsToBuild,
+            isNavy: true
+        });
+
+        if (this.playSound) this.playSound('click');
+        this.updateResourceUI();
+        this.renderNavyUI();
+        this.showNotification(`Закладка ${unitDef.name} начата! Корабль будет спущен на воду через ${unitDef.turnsToBuild} ходов.`, 'success');
+    } else {
+        this.showNotification("Недостаточно ресурсов!", 'warning');
+    }
+};
+
+game.cancelNavyProduction = function(index) {
+    const pm = this.state.politicalMode;
+    const item = pm.productionQueue[index];
+    const unitDef = this.navyUnits[item.unitId];
+
+    // Refund resources (75%)
+    pm.resources.wood += Math.floor(unitDef.cost.wood * 0.75);
+    pm.resources.iron += Math.floor(unitDef.cost.iron * 0.75);
+    pm.resources.coal += Math.floor(unitDef.cost.coal * 0.75);
+    pm.resources.food += Math.floor(unitDef.cost.food * 0.75);
+    pm.resources.leather += Math.floor((unitDef.cost.leather || 0) * 0.75);
+    pm.resources.oil += Math.floor(unitDef.cost.oil * 0.75);
+
+    pm.productionQueue.splice(index, 1);
+    this.updateResourceUI();
+    this.renderNavyUI();
+    this.showNotification("Постройка отменена. Возвращено 75% ресурсов.", "info");
+};
+
+game.updateTerritoryStyle = function (territoryId) {
+    const territory = this.state.territories.find(t => t.id === territoryId);
+    if (!territory || !territory.element) return;
+
+    if (this.gameMode === 'political') {
+        const viewMode = this.state.mapViewMode;
+        let fillColor = '#606060';
+        let weight = 0.5;
+        let interactive = true;
+        let color = 'rgba(212, 175, 55, 0.5)'; // Стандартная обводка
+
+        if (viewMode === 'production') {
+            // В режиме производства: чужие серые, свои по цвету ресурса
+            if (territory.owner === 'player') {
+                const res = this.state.politicalMode.territoryResources[territory.id] || 'wood';
+                const resColors = {
+                    'food': '#f5f5dc',
+                    'leather': '#d2b48c',
+                    'wood': '#5d4037',
+                    'coal': '#424242',
+                    'iron': '#c0c0c0',
+                    'oil': '#000000',
+                    'gold': '#ffd700'
+                };
+                fillColor = resColors[res] || '#5d4037';
+
+                // Если территория выбрана для смены производства
+                if (this.state.politicalMode.selectedProductionTerritories.includes(territory.id)) {
+                    weight = 4;
+                    color = '#fff'; // Белая жирная обводка для выделения
+                } else {
+                    weight = 1.5;
+                }
+                interactive = true;
+            } else {
+                fillColor = '#333';
+                weight = 0.5;
+                interactive = false;
+            }
+        } else if (viewMode === 'battle') {
+            // Режим битвы: цвета по дипломатии
+            if (territory.owner === 'player') {
+                fillColor = '#1565c0'; // Синий - игрок
+            } else if (territory.owner && territory.owner !== 'neutral') {
+                const rel = this.getDiplomacyRelation('player', territory.owner);
+                if (rel === 'war') {
+                    fillColor = '#c62828'; // Красный - враг
+                } else if (rel === 'ally') {
+                    fillColor = '#2e7d32'; // Зеленый - союзник
+                } else {
+                    fillColor = '#757575'; // Серый - нейтрал
+                }
+            } else {
+                fillColor = '#2ecc71'; // Ярко-зеленый - нейтральная свободная земля
+            }
+
+            // Подсветка врагов-соседей
+            const rel = territory.owner ? this.getDiplomacyRelation('player', territory.owner) : 'neutral';
+            if (rel === 'war') {
+                const neighbors = this.state.politicalMode.territoryNeighbors[territory.id] || [];
+                const isAdjacentToPlayer = neighbors.some(nid => {
+                    const nt = this.state.territories.find(t => t.id === nid);
+                    return nt && nt.owner === 'player';
+                });
+                if (isAdjacentToPlayer) {
+                    color = '#2ecc71'; // Зеленая яркая обводка
+                    weight = 4;
+                }
+            }
+            interactive = true;
+        } else {
+            // Обычный политический режим
+            if (territory.owner && territory.owner !== 'neutral') {
+                if (territory.owner === 'player') {
+                    fillColor = this.stringToColor(this.state.politicalMode.playerCountry || territory.feature.properties.historicalOwner);
+                } else if (territory.owner.startsWith('bot')) {
+                    const bot = this.state.politicalMode.botCountries.find(b => b.name === territory.owner);
+                    if (bot) {
+                        fillColor = this.stringToColor(bot.empireName);
+                    } else {
+                        fillColor = this.stringToColor(territory.feature.properties.historicalOwner);
+                    }
+                } else {
+                    fillColor = this.stringToColor(territory.feature.properties.historicalOwner);
+                }
+            } else {
+                fillColor = '#2ecc71'; // Ярко-зеленый для нейтралов
+            }
+            interactive = true;
+        }
+
+        territory.element.setStyle({
+            fillColor: fillColor,
+            color: color,
+            weight: weight,
+            opacity: 0.8,
+            fillOpacity: 0.7,
+            dashArray: ''
+        });
+
+        // Управление интерактивностью (Pointer Events)
+        if (territory.element._path) {
+            territory.element._path.style.pointerEvents = interactive ? 'auto' : 'none';
+        }
+
+        // Рендеринг значка щита, если территория под атакой
+        if (territory.pendingAttack) {
+            this.showAttackMarker(territory);
+        } else {
+            this.removeAttackMarker(territory);
+        }
+    }
+};
+
+game.showAttackMarker = function (territory) {
+    const pm = this.state.politicalMode;
+    if (!pm.attackMarkers) pm.attackMarkers = {};
+
+    // Если маркер уже есть, не пересоздаем
+    if (pm.attackMarkers[territory.id]) return;
+
+    // Находим центр полигона для размещения иконки
+    const center = territory.element.getBounds().getCenter();
+
+    const shieldIcon = L.divIcon({
+        className: 'attack-shield-icon-container',
+        html: `<div class="attack-shield-icon" style="pointer-events: auto !important; cursor: pointer;"><i class="fas fa-shield-alt"></i></div>`,
+        iconSize: [40, 40],
+        iconAnchor: [20, 20]
+    });
+
+    const marker = L.marker(center, {
+        icon: shieldIcon,
+        zIndexOffset: 5000, // Максимальный приоритет поверх всех слоев
+        interactive: true
+    }).addTo(this.state.map);
+
+    console.log(`[SHIELD] Created marker for ${territory.name}`);
+
+    // Используем низкоуровневый Leaflet DomEvent для гарантии перехвата клика
+    if (marker._icon) {
+        L.DomEvent.on(marker._icon, 'click', (e) => {
+            console.log(`[SHIELD] DOM Click intercepted for ${territory.name}`);
+            game.openDefenseModal(territory.id);
+            L.DomEvent.stopPropagation(e);
+        });
+    }
+
+    // Дублируем стандартным методом Leaflet для надежности
+    marker.on('click', (e) => {
+        console.log(`[SHIELD] Marker Object Click for ${territory.name}`);
+        game.openDefenseModal(territory.id);
+        L.DomEvent.stopPropagation(e);
+    });
+
+    pm.attackMarkers[territory.id] = marker;
+};
+
+
+game.removeAttackMarker = function (territory) {
+    const pm = this.state.politicalMode;
+    if (pm.attackMarkers && pm.attackMarkers[territory.id]) {
+        this.state.map.removeLayer(pm.attackMarkers[territory.id]);
+        delete pm.attackMarkers[territory.id];
+    }
+};
+
+
+game.switchMapView = function (mode) {
+    this.state.mapViewMode = mode;
+    this.clearProductionSelection(); // Сбрасываем выбор при смене режима
+
+    // Подсветка кнопок
+    const btnPol = document.getElementById('btnViewPolitical');
+    const btnProd = document.getElementById('btnViewProduction');
+    const btnBat = document.getElementById('btnViewBattle');
+    if (btnPol) btnPol.classList.toggle('active', mode === 'political');
+    if (btnProd) btnProd.classList.toggle('active', mode === 'production');
+    if (btnBat) btnBat.classList.toggle('active', mode === 'battle');
+
+    // Перерисовываем всю карту
+    this.state.territories.forEach(t => {
+        this.updateTerritoryStyle(t.id);
+    });
+};
+
+game.batchSetProduction = function (resource) {
+    const selected = this.state.politicalMode.selectedProductionTerritories;
+    if (selected.length === 0) return;
+
+    selected.forEach(id => {
+        this.state.politicalMode.territoryResources[id] = resource;
+        this.updateTerritoryStyle(id);
+    });
+
+    const count = selected.length;
+    this.showNotification(`Производство на ${count} территориях изменено на: ${this.getResourceName(resource)}`);
+
+    this.clearProductionSelection();
+};
+
+game.clearProductionSelection = function () {
+    const selected = this.state.politicalMode.selectedProductionTerritories;
+    const toUpdate = [...selected];
+    this.state.politicalMode.selectedProductionTerritories = [];
+
+    toUpdate.forEach(id => this.updateTerritoryStyle(id));
+
+    const bar = document.getElementById('productionBar');
+    if (bar) bar.style.display = 'none';
+};
+
+game.setTerritoryProduction = function (resource) {
+    // Устарело, используем batchSetProduction, но оставим для совместимости если нужно
+    this.state.politicalMode.selectedProductionTerritories = [this.state.productionTarget.id];
+    this.batchSetProduction(resource);
+};
+
+game.getResourceName = function (id) {
+    const names = {
+        food: 'Еда', leather: 'Кожа', wood: 'Дерево',
+        coal: 'Уголь', iron: 'Железо', oil: 'Нефть', gold: 'Золото'
+    };
+    return names[id] || id;
 };
 
 game.initializeAdjacency = function () {
@@ -4198,6 +5641,7 @@ game.initializeAdjacency = function () {
     const neighbors = {};
     function extractCoords(geometry) {
         const coords = [];
+        if (!geometry || !geometry.type) return coords;
         if (geometry.type === 'Polygon') {
             geometry.coordinates.forEach(ring => {
                 ring.forEach(coord => coords.push([coord[0].toFixed(4), coord[1].toFixed(4)]));
@@ -4213,6 +5657,7 @@ game.initializeAdjacency = function () {
     }
     const coordMap = {};
     territories.forEach(t => {
+        if (!t.feature || !t.feature.geometry) return;
         const coords = extractCoords(t.feature.geometry);
         coords.forEach(c => {
             const key = `${c[0]},${c[1]}`;
@@ -4222,15 +5667,17 @@ game.initializeAdjacency = function () {
     });
     territories.forEach(t => {
         const neighborSet = new Set();
-        const coords = extractCoords(t.feature.geometry);
-        coords.forEach(c => {
-            const key = `${c[0]},${c[1]}`;
-            if (coordMap[key]) {
-                coordMap[key].forEach(nId => {
-                    if (nId !== t.id) neighborSet.add(nId);
-                });
-            }
-        });
+        if (t.feature && t.feature.geometry) {
+            const coords = extractCoords(t.feature.geometry);
+            coords.forEach(c => {
+                const key = `${c[0]},${c[1]}`;
+                if (coordMap[key]) {
+                    coordMap[key].forEach(nId => {
+                        if (nId !== t.id) neighborSet.add(nId);
+                    });
+                }
+            });
+        }
         neighbors[t.id] = Array.from(neighborSet);
     });
     this.state.politicalMode.territoryNeighbors = neighbors;
@@ -4238,155 +5685,124 @@ game.initializeAdjacency = function () {
 };
 
 game.assignResources = function () {
-    const resources = ['wood', 'coal', 'iron', 'oil', 'gold'];
+    const resources = ['wood', 'coal', 'iron', 'oil', 'gold', 'food', 'food', 'leather']; // Еда попадается чаще
+    const pm = this.state.politicalMode;
+
+
+
     this.state.territories.forEach(t => {
         const randomResource = resources[Math.floor(Math.random() * resources.length)];
-        this.state.politicalMode.territoryResources[t.id] = randomResource;
+        if (pm) pm.territoryResources[t.id] = randomResource;
+
+        // Армия была назначена в startPoliticalGame, но если нет - ставим дефолт
+        if (t.army === undefined) {
+            t.army = Math.floor(Math.random() * 20) + 10;
+        }
     });
 };
 
 game.startResourceProduction = function () {
+    // Система добычи ресурсов теперь перенесена в переход по месяцам (endTurn.js)
     if (this.state.politicalMode.productionTimer) clearInterval(this.state.politicalMode.productionTimer);
-    this.state.politicalMode.productionTimer = setInterval(() => {
-        if (!this.state.politicalMode.enabled || !this.state.gameActive) return;
-        const rates = { wood: 12, coal: 8, iron: 6, oil: 4, gold: 1 };
-        const pm = this.state.politicalMode;
-        this.state.territories.forEach(t => {
-            if (t.captured && t.owner === 'player') {
-                const resourceType = pm.territoryResources[t.id];
-                if (resourceType && rates[resourceType]) {
-                    pm.resources[resourceType] += rates[resourceType];
-                }
-            }
-        });
-        this.updateResourceUI();
-    }, 1000);
 };
 
 game.startMaintenanceCycle = function () {
     if (this.state.politicalMode.maintenanceTimer) clearInterval(this.state.politicalMode.maintenanceTimer);
     this.state.politicalMode.maintenanceTimer = setInterval(() => {
         if (!this.state.politicalMode.enabled || !this.state.gameActive) return;
-        const playerTerritories = this.state.territories.filter(t => t.captured && t.owner === 'player').length;
-        const costPerSecond = (playerTerritories * 30) / 60;
-        this.state.politicalMode.stars -= costPerSecond;
-        if (this.state.politicalMode.stars < 0 && !this.state.politicalMode.revoltTimer) {
-            this.startRevoltCountdown();
-        } else if (this.state.politicalMode.stars >= 0 && this.state.politicalMode.revoltTimer) {
-            clearInterval(this.state.politicalMode.revoltTimer);
-            this.state.politicalMode.revoltTimer = null;
-            this.state.politicalMode.revoltCountdown = 90;
-            document.getElementById('revoltWarning').style.display = 'none';
-        }
-        this.updateResourceUI();
-    }, 1000);
-};
+        const pm = this.state.politicalMode;
 
-game.startRevoltCountdown = function () {
-    document.getElementById('revoltWarning').style.display = 'block';
-    this.state.politicalMode.revoltCountdown = 90;
-    this.state.politicalMode.revoltTimer = setInterval(() => {
-        this.state.politicalMode.revoltCountdown--;
-        document.getElementById('revoltTimer').textContent = this.state.politicalMode.revoltCountdown;
-        if (this.state.politicalMode.revoltCountdown <= 0) {
-            this.executeRevolt();
-            clearInterval(this.state.politicalMode.revoltTimer);
-            this.state.politicalMode.revoltTimer = null;
-            document.getElementById('revoltWarning').style.display = 'none';
-        }
-    }, 1000);
-};
-
-game.executeRevolt = function () {
-    const playerTerritories = this.state.territories.filter(t => t.captured && t.owner === 'player');
-    const loseCount = Math.floor(playerTerritories.length / 2);
-    const shuffled = playerTerritories.sort(() => 0.5 - Math.random());
-    const toLose = shuffled.slice(0, loseCount);
-    toLose.forEach(t => {
-        t.captured = false;
-        t.owner = null;
-        t.element.setStyle({
-            fillColor: this.getUniqueColor(t.id),
-            weight: 0.8,
-            opacity: 0.6,
-            color: 'rgba(165, 124, 0, 0.4)',
-            fillOpacity: 0.4
+        // Считаем только реальных солдат на территориях для потребления еды
+        let totalSoldiers = 0;
+        this.state.territories.forEach(t => {
+            if (t.captured && t.owner === 'player') {
+                totalSoldiers += (t.army || 0);
+            }
         });
-        this.state.capturedTerritories--;
-    });
-    document.getElementById('capturedCount').textContent = this.state.capturedTerritories;
-    this.playSound('wrong');
-    alert(`БУНТ! Вы потеряли ${loseCount} территорий из-за недостатка звезд!`);
-};
 
-game.startTradeSystem = function () {
-    if (this.state.politicalMode.tradeTimer) clearInterval(this.state.politicalMode.tradeTimer);
-    const intervals = { 1: 150000, 2: 330000, 3: 690000 };
-    const interval = intervals[this.settings.difficulty] || 330000;
-    this.state.politicalMode.tradeTimer = setInterval(() => {
-        if (!this.state.politicalMode.enabled || !this.state.gameActive) return;
-        this.generateTradeOffer();
-    }, interval);
-};
+        // ВРЕМЕННО: Расходы на содержание отключены
+        const foodCost = 0; // Math.floor(totalSoldiers * 0.005); 
+        const leatherCost = 0; // Math.floor(totalSoldiers * 0.002);
 
-game.generateTradeOffer = function () {
-    const resources = ['wood', 'coal', 'iron', 'oil', 'gold'];
-    const prices = { wood: 5, coal: 10, iron: 15, oil: 20, gold: 30 };
-    let resourceWeights;
-    if (this.settings.difficulty === 1) resourceWeights = [0.4, 0.3, 0.2, 0.08, 0.02];
-    else if (this.settings.difficulty === 2) resourceWeights = [0.2, 0.2, 0.2, 0.2, 0.2];
-    else resourceWeights = [0.02, 0.08, 0.2, 0.3, 0.4];
-    const rand = Math.random();
-    let cumulative = 0;
-    let selectedResource = 'wood';
-    for (let i = 0; i < resources.length; i++) {
-        cumulative += resourceWeights[i];
-        if (rand <= cumulative) {
-            selectedResource = resources[i];
-            break;
+        pm.resources.food -= foodCost;
+        pm.resources.leather -= leatherCost;
+
+        if (pm.resources.food < 0) pm.resources.food = 0;
+        if (pm.resources.leather < 0) pm.resources.leather = 0;
+
+        // Обработка перемещений войск
+        if (pm.activeDeployments && pm.activeDeployments.length > 0) {
+            for (let i = pm.activeDeployments.length - 1; i >= 0; i--) {
+                const dep = pm.activeDeployments[i];
+                dep.timeLeft--;
+
+                // Обновляем окно казармы если оно открыто и показывает этот таймер
+                // (можно опустить, так как игрок обычно закрывает окно, но для верности обновляем)
+                if (document.getElementById('barracksModal').style.display === 'block') {
+                    // Update preview if same territory is selected
+                }
+
+                if (dep.timeLeft <= 0) {
+                    const targetT = this.state.territories.find(t => t.id === dep.targetTerritoryId);
+                    if (targetT) {
+                        // Если целевая территория не принадлежит игроку - это атака
+                        if (targetT.owner !== 'player') {
+                            let enemyArmy = targetT.army || 0;
+                            if (dep.power > enemyArmy) {
+                                targetT.army = dep.power - enemyArmy;
+                                this.captureTerritory(targetT, 'player');
+                                alert(`⚔️ Ваши войска (${dep.unitName}) прибыли в ${targetT.feature.properties.name} и захватили её! Потери врага: ${enemyArmy}.`);
+                            } else {
+                                targetT.army = enemyArmy - dep.power;
+                                alert(`💀 Ваши войска (${dep.unitName}) прибыли в ${targetT.feature.properties.name}, но были разбиты! У врага осталось: ${targetT.army}.`);
+                            }
+                        } else {
+                            targetT.army = (targetT.army || 0) + dep.power;
+                            alert(`🪖 Ваши войска (${dep.unitName}) благополучно прибыли в ${targetT.feature.properties.name}. Теперь там армия: ${targetT.army}.`);
+                        }
+                    }
+                    pm.activeDeployments.splice(i, 1);
+                }
+            }
         }
-    }
-    const amount = Math.floor(Math.random() * 20) + 10;
-    const cost = amount * prices[selectedResource];
-    const names = { wood: 'дерева', coal: 'угля', iron: 'железа', oil: 'нефти', gold: 'золота' };
-    document.getElementById('tradeOfferText').textContent =
-        `Продать ${amount} ${names[selectedResource]} за ${cost} звезд?`;
-    document.getElementById('tradePopup').style.display = 'block';
-    window.currentTrade = { resource: selectedResource, amount, cost };
-};
 
-game.acceptTrade = function () {
-    const trade = window.currentTrade;
-    if (!trade) return;
-    const pm = this.state.politicalMode;
-    if (pm.resources[trade.resource] >= trade.amount) {
-        pm.resources[trade.resource] -= trade.amount;
-        pm.stars += trade.cost;
         this.updateResourceUI();
-        this.playSound('correct');
-    } else {
-        alert('Недостаточно ресурсов!');
-        this.playSound('wrong');
-    }
-    document.getElementById('tradePopup').style.display = 'none';
-    window.currentTrade = null;
+    }, 1000);
 };
 
-game.declineTrade = function () {
-    document.getElementById('tradePopup').style.display = 'none';
-    window.currentTrade = null;
-};
+// Убрана система торговли
 
 game.updateResourceUI = function () {
     const pm = this.state.politicalMode;
-    document.getElementById('starsCount').textContent = Math.floor(pm.stars);
     document.getElementById('woodCount').textContent = pm.resources.wood;
     document.getElementById('coalCount').textContent = pm.resources.coal;
     document.getElementById('ironCount').textContent = pm.resources.iron;
     document.getElementById('oilCount').textContent = pm.resources.oil;
     document.getElementById('goldCount').textContent = pm.resources.gold;
-    const playerTerritories = this.state.territories.filter(t => t.captured && t.owner === 'player').length;
-    document.getElementById('maintenanceCost').textContent = playerTerritories * 30;
+    document.getElementById('foodCount').textContent = pm.resources.food;
+    document.getElementById('leatherCount').textContent = pm.resources.leather;
+    document.getElementById('manpowerCount').textContent = pm.resources.manpower;
+
+    // Синхронизация новой "Казны" (теперь это монеты)
+    const treasury = document.getElementById('treasuryCount');
+    if (treasury) treasury.textContent = pm.resources.coins;
+};
+
+game.toggleResourcePanel = function () {
+    const panel = document.getElementById('resourcePanel');
+    if (panel) {
+        panel.classList.toggle('collapsed');
+    }
+};
+
+game.updateActionsUI = function () {
+    const pm = this.state.politicalMode;
+    const el = document.getElementById('actionsLeftCount');
+    if (el) {
+        el.textContent = `${pm.actionsLeft} / 4`;
+        // Если действий мало, подсвечиваем красным
+        el.style.color = pm.actionsLeft <= 1 ? '#ff4d4d' : '#ffeb3b';
+    }
 };
 
 game.isAdjacentToOwned = function (territoryId, owner) {
@@ -4517,7 +5933,7 @@ game.createRoom = async function () {
     this._showLoading('createRoomBtn', 'Создаём...');
     try {
         const code = this.generateRoomCode();
-        
+
         const { error } = await supabaseClient.from('rooms').insert([{
             name: name,
             code: code,
@@ -4547,7 +5963,7 @@ game.createRoom = async function () {
 game.renderMyRooms = async function () {
     const container = document.getElementById('myRoomsList');
     container.innerHTML = '<p class="empty-state"><i class="fas fa-spinner fa-spin"></i> Загрузка...</p>';
-    
+
     if (!this.user) {
         container.innerHTML = '<p class="empty-state">Пожалуйста, войдите в систему.</p>';
         return;
@@ -4607,7 +6023,7 @@ game.deleteRoom = async function (roomId) {
             .from('rooms')
             .delete()
             .eq('id', roomId);
-            
+
         if (error) throw error;
         this.renderMyRooms();
     } catch (e) {
@@ -4630,7 +6046,7 @@ game.showRoomLeaderboard = async function (roomId) {
             .single();
 
         if (roomError) throw roomError;
-        
+
         document.getElementById('lbRoomName').textContent = room.name;
         document.getElementById('lbRoomCode').textContent = room.code;
 
@@ -4680,7 +6096,7 @@ game.findRoomByCode = async function (code) {
         .select('*')
         .eq('code', code.toUpperCase())
         .single();
-        
+
     if (error) return null;
     return data;
 };
@@ -4710,18 +6126,18 @@ game.joinRoom = async function () {
     const code = document.getElementById('roomCodeInput').value.trim().toUpperCase();
     const name = document.getElementById('playerNameInput').value.trim();
 
-    if (!code || code.length < 6) { alert('Введите 6-значный код комнаты!'); return; }
-    if (!name) { alert('Введите ваше имя!'); return; }
+    if (!code || code.length < 6) { this.showAlert('Введите 6-значный код комнаты!', 'Внимание'); return; }
+    if (!name) { this.showAlert('Введите ваше имя!', 'Внимание'); return; }
 
     this._showLoading('joinRoomBtn', 'Поиск...');
     try {
         const room = await this.findRoomByCode(code);
         this._hideLoading('joinRoomBtn');
-        if (!room) { alert('Комната не найдена! Проверьте код.'); return; }
+        if (!room) { this.showAlert('Комната не найдена! Проверьте код.', 'Ошибка'); return; }
         this.startRoomGame(room, name);
     } catch (e) {
         this._hideLoading('joinRoomBtn');
-        alert('Ошибка соединения: ' + e.message);
+        this.showAlert('Ошибка соединения: ' + e.message, 'Ошибка');
     }
 };
 
@@ -4760,83 +6176,255 @@ game.saveRoomResult = async function (roomId, playerName, score, correct, total)
     }
 };
 
-// Синхронизация статистики пользователя (Supabase)
-game.syncStats = async function () {
-    if (!this.user) return;
-    
-    // Получаем текущую локальную стату
-    const localStats = JSON.parse(localStorage.getItem('historyGameStats') || '{}');
-    if (!localStats.totalGames) return;
-
-    // Считаем % правильных ответов
-    let percent = 0;
-    if (localStats.totalQuestions > 0) {
-        percent = (localStats.correctAnswersTotal / localStats.totalQuestions) * 100;
-    }
-
-    try {
-        const { error } = await supabaseClient
-            .from('user_stats')
-            .upsert({
-                user_id: this.user.id,
-                total_games: localStats.totalGames,
-                territories_captured: localStats.totalTerritories,
-                correct_answers_percent: percent,
-                total_score: localStats.score,
-                updated_at: new Date().toISOString()
-            });
-            
-        if (error) throw error;
-        console.log("Статистика синхронизирована с Supabase");
-    } catch (e) {
-        console.error("Ошибка синхронизации статов:", e);
-    }
-};
-
-// Обновление статистики в UI (на главном экране)
+// Обновление статистики в UI (на главном экране и в навигации)
 game.updateStats = function () {
-    const stats = JSON.parse(localStorage.getItem('historyGameStats') || '{}');
-    
-    const elements = {
-        totalGames: document.getElementById('totalGames'),
-        territoriesCaptured: document.getElementById('territoriesCaptured'),
-        correctAnswers: document.getElementById('correctAnswers')
-    };
+    const stats = this.state.userCloudStats || { total_games: 0, territories_captured: 0, total_score: 0, correct_answers_percent: 0 };
 
-    if (elements.totalGames) elements.totalGames.textContent = stats.totalGames || 0;
-    if (elements.territoriesCaptured) elements.territoriesCaptured.textContent = stats.totalTerritories || 0;
-    if (elements.correctAnswers) elements.correctAnswers.textContent = stats.correctAnswers || "0%";
+    // Элементы главного меню
+    const elTotalGames = document.getElementById('totalGames');
+    const elTerritories = document.getElementById('territoriesCaptured');
+    const elCorrect = document.getElementById('correctAnswers');
+
+    if (elTotalGames) elTotalGames.textContent = stats.total_games;
+    if (elTerritories) elTerritories.textContent = stats.territories_captured;
+    if (elCorrect) elCorrect.textContent = Math.round(stats.correct_answers_percent) + "%";
+
+    // Элементы навигации
+    const navScore = document.getElementById('navScore');
+    const navTerritories = document.getElementById('navTerritories');
+
+    if (navScore) navScore.textContent = stats.total_score;
+    if (navTerritories) navTerritories.textContent = stats.territories_captured;
 };
 
-// Загрузка статистики из Supabase
+// Загрузка статистики из Supabase (теперь основное хранилище)
 game.loadStatsFromCloud = async function () {
-    if (!this.user) return;
+    if (!this.user) return null;
     try {
         const { data, error } = await supabaseClient
             .from('user_stats')
             .select('*')
             .eq('user_id', this.user.id)
             .single();
-            
-        if (error && error.code !== 'PGRST116') throw error; 
+
+        if (error && error.code !== 'PGRST116') throw error;
 
         if (data) {
-            const cloudStats = {
-                totalGames: data.total_games,
-                totalTerritories: data.territories_captured,
-                correctAnswers: Math.round(data.correct_answers_percent) + "%",
-                correctAnswersTotal: Math.round((data.correct_answers_percent / 100) * data.total_games * 20), // Приблизительно, если нет точных данных
-                totalQuestions: data.total_games * 20, // Предполагаем среднее
-                score: data.total_score
+            this.state.userCloudStats = data;
+        } else {
+            // Если статов еще нет, создаем начальную запись
+            const initialStats = {
+                user_id: this.user.id,
+                total_games: 0,
+                territories_captured: 0,
+                correct_answers_percent: 0,
+                total_score: 0
             };
-            localStorage.setItem('historyGameStats', JSON.stringify(cloudStats));
+            const { data: newData, error: insertError } = await supabaseClient
+                .from('user_stats')
+                .insert([initialStats])
+                .select()
+                .single();
+
+            if (!insertError) this.state.userCloudStats = newData;
         }
+        this.updateStats();
+        return this.state.userCloudStats;
     } catch (e) {
         console.error("Ошибка загрузки статов:", e);
+        return null;
     }
 };
 
-// Event Listeners и Auth Logic
+// Синхронизация результатов игры с Supabase (с поддержкой режимов)
+game.saveGameResultsToCloud = async function (results) {
+    if (!this.user) return;
+    const mode = results.gameMode || 'single';
+    const playerName = this.userProfile?.name || this.user.user_metadata?.full_name || this.user.email.split('@')[0];
+
+    try {
+        // 1. Сохраняем запись об игре в game_results (для лидерборда)
+        await supabaseClient.from('game_results').insert([{
+            user_id: this.user.id,
+            player_name: playerName,
+            game_mode: mode,
+            score: results.score,
+            territories_captured: results.territories,
+            correct_answers: results.correct,
+            total_questions: results.total
+        }]);
+
+        // 2. Обновляем агрегированную статистику
+        const currentStats = await this.loadStatsFromCloud() || {
+            total_games: 0, territories_captured: 0, total_score: 0, correct_answers_percent: 0,
+            single_games: 0, single_score: 0, single_territories: 0,
+            political_games: 0, political_score: 0, political_territories: 0,
+            online_games: 0, online_score: 0, online_territories: 0
+        };
+
+        const newTotalGames = (currentStats.total_games || 0) + 1;
+        const newScore = (currentStats.total_score || 0) + results.score;
+        const newTerritories = (currentStats.territories_captured || 0) + results.territories;
+
+        const totalCorrect = Math.round(((currentStats.correct_answers_percent || 0) / 100) * ((currentStats.total_games || 0) * 20)) + results.correct;
+        const totalQuestions = ((currentStats.total_games || 0) * 20) + results.total;
+        const newPercent = totalQuestions > 0 ? (totalCorrect / totalQuestions) * 100 : 0;
+
+        // Статы по режимам
+        const modeUpdate = {};
+        if (mode === 'single') {
+            modeUpdate.single_games = (currentStats.single_games || 0) + 1;
+            modeUpdate.single_score = (currentStats.single_score || 0) + results.score;
+            modeUpdate.single_territories = (currentStats.single_territories || 0) + results.territories;
+        } else if (mode === 'political') {
+            modeUpdate.political_games = (currentStats.political_games || 0) + 1;
+            modeUpdate.political_score = (currentStats.political_score || 0) + results.score;
+            modeUpdate.political_territories = (currentStats.political_territories || 0) + results.territories;
+        } else if (mode === 'online') {
+            modeUpdate.online_games = (currentStats.online_games || 0) + 1;
+            modeUpdate.online_score = (currentStats.online_score || 0) + results.score;
+            modeUpdate.online_territories = (currentStats.online_territories || 0) + results.territories;
+        }
+
+        const { error } = await supabaseClient.from('user_stats').upsert({
+            user_id: this.user.id,
+            total_games: newTotalGames,
+            territories_captured: newTerritories,
+            correct_answers_percent: newPercent,
+            total_score: newScore,
+            updated_at: new Date().toISOString(),
+            ...modeUpdate
+        });
+
+        if (error) throw error;
+        console.log('Результаты сохранены [режим:', mode, ']');
+        await this.loadStatsFromCloud();
+
+        // Обновляем лидерборд на главном экране
+        this.loadGlobalLeaderboard(mode);
+    } catch (e) {
+        console.error('Ошибка сохранения результатов:', e);
+    }
+};
+
+// Загрузка глобального лидерборда для главного меню
+game.loadGlobalLeaderboard = async function (mode) {
+    if (!mode) mode = 'single';
+    const container = document.getElementById('globalLeaderboardList');
+    if (!container) return;
+
+    container.innerHTML = '<div class="lb-loading"><i class="fas fa-spinner fa-spin"></i> Загрузка...</div>';
+
+    try {
+        const { data, error } = await supabaseClient
+            .from('game_results')
+            .select('player_name, score, territories_captured, correct_answers, total_questions, created_at')
+            .eq('game_mode', mode)
+            .order('score', { ascending: false })
+            .limit(10);
+
+        if (error) throw error;
+
+        if (!data || data.length === 0) {
+            container.innerHTML = '<div class="lb-empty"><i class="fas fa-ghost"></i><span>Пока нет игроков в этом режиме</span></div>';
+            return;
+        }
+
+        const currentUserName = this.userProfile?.name || (this.user ? this.user.email.split('@')[0] : null);
+
+        container.innerHTML = data.map((entry, i) => {
+            const rank = i + 1;
+            const rankIcon = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '<span class="lb-rank-num">' + rank + '</span>';
+            const rankClass = rank === 1 ? 'gold' : rank === 2 ? 'silver' : rank === 3 ? 'bronze' : '';
+            const accuracy = entry.total_questions > 0 ? Math.round((entry.correct_answers / entry.total_questions) * 100) : 0;
+            const isCurrentUser = currentUserName && entry.player_name === currentUserName;
+
+            return '<div class="lb-row ' + rankClass + (isCurrentUser ? ' lb-row-self' : '') + '">' +
+                '<span class="lb-rank-cell">' + rankIcon + '</span>' +
+                '<span class="lb-name-cell">' + (isCurrentUser ? '<i class="fas fa-star lb-self-icon"></i>' : '') + entry.player_name + '</span>' +
+                '<span class="lb-score-cell">' + entry.score.toLocaleString() + '</span>' +
+                '<span class="lb-terr-cell">' + entry.territories_captured + '</span>' +
+                '<span class="lb-acc-cell">' + accuracy + '%</span>' +
+                '</div>';
+        }).join('');
+    } catch (e) {
+        container.innerHTML = '<div class="lb-empty"><i class="fas fa-exclamation-triangle"></i><span>Ошибка загрузки</span></div>';
+        console.error(e);
+    }
+};
+
+// Показ модального окна профиля пользователя
+game.showProfileModal = async function () {
+    if (!this.user) return;
+    const modal = document.getElementById('profileModal');
+    if (!modal) return;
+    modal.style.display = 'flex';
+
+    const profile = this.userProfile || {};
+    const stats = this.state.userCloudStats || {};
+
+    const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+
+    // Заголовок профиля
+    setEl('profileName', profile.name || this.user.user_metadata?.full_name || 'Игрок');
+    const classEl = document.getElementById('profileClass');
+    if (classEl) classEl.textContent = profile.class ? profile.class : '';
+    const emailEl = document.getElementById('profileEmail');
+    if (emailEl) emailEl.textContent = profile.email || this.user.email || '';
+
+    // Общая статистика
+    setEl('profileTotalGames', stats.total_games || 0);
+    setEl('profileTotalScore', (stats.total_score || 0).toLocaleString());
+    setEl('profileAccuracy', Math.round(stats.correct_answers_percent || 0) + '%');
+    setEl('profileTotalTerr', stats.territories_captured || 0);
+
+    // Статистика по режимам
+    setEl('pSingleGames', stats.single_games || 0);
+    setEl('pSingleScore', (stats.single_score || 0).toLocaleString());
+    setEl('pSingleTerr', stats.single_territories || 0);
+    setEl('pPolitGames', stats.political_games || 0);
+    setEl('pPolitScore', (stats.political_score || 0).toLocaleString());
+    setEl('pPolitTerr', stats.political_territories || 0);
+    setEl('pOnlineGames', stats.online_games || 0);
+    setEl('pOnlineScore', (stats.online_score || 0).toLocaleString());
+    setEl('pOnlineTerr', stats.online_territories || 0);
+
+    // Последние игры
+    const recentContainer = document.getElementById('profileRecentGames');
+    if (recentContainer) {
+        recentContainer.innerHTML = '<div class="lb-loading"><i class="fas fa-spinner fa-spin"></i></div>';
+        try {
+            const { data } = await supabaseClient
+                .from('game_results')
+                .select('game_mode, score, territories_captured, correct_answers, total_questions, created_at')
+                .eq('user_id', this.user.id)
+                .order('created_at', { ascending: false })
+                .limit(5);
+
+            if (!data || data.length === 0) {
+                recentContainer.innerHTML = '<p class="empty-state">Нет данных об играх</p>';
+            } else {
+                const modeLabels = { single: 'Одиночная', political: 'Политическая', online: 'Онлайн' };
+                const modeIcons = { single: 'fa-user', political: 'fa-globe-americas', online: 'fa-users' };
+                recentContainer.innerHTML = data.map(function (g) {
+                    const acc = g.total_questions > 0 ? Math.round((g.correct_answers / g.total_questions) * 100) : 0;
+                    const date = new Date(g.created_at).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short' });
+                    return '<div class="recent-game-row">' +
+                        '<span class="rg-mode"><i class="fas ' + (modeIcons[g.game_mode] || 'fa-gamepad') + '"></i> ' + (modeLabels[g.game_mode] || g.game_mode) + '</span>' +
+                        '<span class="rg-score">\u2605 ' + g.score.toLocaleString() + '</span>' +
+                        '<span class="rg-terr"><i class="fas fa-flag"></i> ' + g.territories_captured + '</span>' +
+                        '<span class="rg-acc">' + acc + '%</span>' +
+                        '<span class="rg-date">' + date + '</span>' +
+                        '</div>';
+                }).join('');
+            }
+        } catch (e) {
+            recentContainer.innerHTML = '<p class="empty-state">Ошибка загрузки</p>';
+        }
+    }
+};
+
+
 window.addEventListener('DOMContentLoaded', () => {
     // Навигация комнат (те же id)
     document.getElementById('btnCreateRoom')?.addEventListener('click', () => {
@@ -4863,6 +6451,11 @@ window.addEventListener('DOMContentLoaded', () => {
     document.getElementById('joinRoomBtn')?.addEventListener('click', () => game.joinRoom());
     document.getElementById('roomCodeInput')?.addEventListener('input', () => game.checkRoomCode());
 
+    // --- PROFILE LOGIC ---
+    const openProfile = () => game.showProfileModal();
+    document.getElementById('profileBtn')?.addEventListener('click', openProfile);
+    document.getElementById('userDisplayName')?.addEventListener('click', openProfile);
+
     // --- AUTH LOGIC (SUPABASE) ---
     const authModal = document.getElementById('authModal');
     const authForm = document.getElementById('authForm');
@@ -4883,19 +6476,30 @@ window.addEventListener('DOMContentLoaded', () => {
         document.getElementById('authTitle').textContent = isReg ? 'Создать аккаунт' : 'С возвращением!';
         document.getElementById('authSubtitle').textContent = isReg ? 'Присоединяйтесь к истории' : 'Войдите, чтобы сохранить прогресс';
         document.getElementById('authSubmitText').textContent = isReg ? 'Зарегистрироваться' : 'Войти';
-        document.getElementById('authError').style.display = 'none';
 
+        // Сбрасываем блок ошибки/успеха
+        const errorEl = document.getElementById('authError');
+        errorEl.style.display = 'none';
+        errorEl.style.background = '';
+        errorEl.style.borderColor = '';
+        errorEl.style.color = '';
+        errorEl.textContent = '';
+
+        // Показываем/скрываем поля только для регистрации
         const regFields = document.querySelectorAll('.reg-only');
         regFields.forEach(field => {
             field.style.display = isReg ? 'flex' : 'none';
             const input = field.querySelector('input');
-            if (input) input.required = isReg;
+            if (input) {
+                input.required = isReg;
+                if (!isReg) input.value = ''; // Очищаем при переключении на вход
+            }
         });
     }
 
     authForm?.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const email = document.getElementById('authEmail').value;
+        const email = document.getElementById('authEmail').value.trim();
         const password = document.getElementById('authPassword').value;
         const name = document.getElementById('authName').value.trim();
         const userClass = document.getElementById('authClass').value.trim();
@@ -4906,36 +6510,80 @@ window.addEventListener('DOMContentLoaded', () => {
 
         try {
             if (isRegisterMode) {
-                if (!name) throw new Error("Введите имя");
-                
-                const { data, error } = await supabaseClient.auth.signUp({ 
-                    email, 
+                // Валидация
+                if (!name) throw new Error('Введите ваше имя');
+                if (!email) throw new Error('Введите email');
+                if (password.length < 6) throw new Error('Пароль должен быть не менее 6 символов');
+
+                const { data, error } = await supabaseClient.auth.signUp({
+                    email,
                     password,
                     options: { data: { full_name: name, class: userClass } }
                 });
-                
+
                 if (error) throw error;
-                if (data.user) {
-                    // Создаем профиль в таблице profiles
-                    await supabaseClient.from('profiles').insert([{
-                        id: data.user.id,
-                        name: name,
-                        class: userClass,
-                        email: email
-                    }]);
-                    
-                    // Создаем начальные статы
-                    await supabaseClient.from('user_stats').insert([{ user_id: data.user.id }]);
+
+                const userId = data?.user?.id;
+                if (userId) {
+                    // Сохраняем профиль
+                    const { error: profError } = await supabaseClient.from('profiles').upsert([
+                        { id: userId, name: name, class: userClass, email: email }
+                    ]);
+                    if (profError) console.error('Profile error:', profError);
+
+                    // Сохраняем начальную статистику
+                    const { error: statError } = await supabaseClient.from('user_stats').upsert([
+                        {
+                            user_id: userId, total_games: 0, territories_captured: 0,
+                            correct_answers_percent: 0, total_score: 0
+                        }
+                    ]);
+                    if (statError) console.error('Stats error:', statError);
                 }
-                alert("Успешная регистрация! Проверьте email (если включено подтверждение) или просто войдите.");
+
+                // Переключаем на вход и заполняем email
+                setAuthMode(false);
+                document.getElementById('authEmail').value = email;
+                document.getElementById('authPassword').value = '';
+
+                // Показываем уведомление внутри модалки
+                errorEl.style.background = 'rgba(76,175,80,0.12)';
+                errorEl.style.borderColor = 'rgba(76,175,80,0.4)';
+                errorEl.style.color = '#4caf50';
+                errorEl.textContent = '✓ Регистрация успешна! Войдите в аккаунт.';
+                errorEl.style.display = 'block';
+
             } else {
-                const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
-                if (error) throw error;
+                // Вход
+                if (!email) throw new Error('Введите email');
+                if (!password) throw new Error('Введите пароль');
+
+                const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+                if (error) {
+                    // Переводим типичные ошибки на русский
+                    if (error.message.includes('Invalid login credentials')) {
+                        throw new Error('Неверный email или пароль');
+                    }
+                    if (error.message.includes('Email not confirmed')) {
+                        throw new Error('Подтвердите email перед входом');
+                    }
+                    throw error;
+                }
+
+                // Закрываем модалку после успешного входа
+                authModal.style.display = 'none';
+                authForm.reset();
+                // Сбрасываем стиль ошибки
+                errorEl.style.background = '';
+                errorEl.style.borderColor = '';
+                errorEl.style.color = '';
             }
-            authModal.style.display = 'none';
-            authForm.reset();
         } catch (error) {
-            console.error("Auth error:", error);
+            console.error('Auth error:', error);
+            // Сбрасываем зелёный стиль если был
+            errorEl.style.background = '';
+            errorEl.style.borderColor = '';
+            errorEl.style.color = '';
             errorEl.textContent = error.message;
             errorEl.style.display = 'block';
         } finally {
@@ -4943,36 +6591,1768 @@ window.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    document.getElementById('logoutBtn')?.addEventListener('click', () => supabaseClient.auth.signOut());
+    // --- LOGOUT LOGIC ---
+    const logoutModal = document.getElementById('logoutConfirmModal');
+
+    document.getElementById('logoutBtn')?.addEventListener('click', () => {
+        if (logoutModal) logoutModal.style.display = 'flex';
+    });
+
+    document.getElementById('confirmLogoutBtn')?.addEventListener('click', async () => {
+        await supabaseClient.auth.signOut();
+        if (logoutModal) logoutModal.style.display = 'none';
+    });
+
+    document.getElementById('cancelLogoutBtn')?.addEventListener('click', () => {
+        if (logoutModal) logoutModal.style.display = 'none';
+    });
 
     // Слушатель Auth
     supabaseClient.auth.onAuthStateChange(async (event, session) => {
         const user = session?.user || null;
         game.user = user;
-        
+
         const loginBtn = document.getElementById('loginBtn');
         const userInfo = document.getElementById('userInfo');
         const userNameEl = document.getElementById('userDisplayName');
 
+        // Другие кнопки управления (язык, тема, звук)
+        const langToggle = document.getElementById('languageToggle');
+        const themeToggle = document.getElementById('themeToggle');
+        const soundToggle = document.getElementById('soundToggle');
+
         if (user) {
             loginBtn.style.display = 'none';
             userInfo.style.display = 'flex';
-            
+
+            // Показываем настройки для авторизованных пользователей
+            if (langToggle) langToggle.style.display = 'flex';
+            if (themeToggle) themeToggle.style.display = 'flex';
+            if (soundToggle) soundToggle.style.display = 'flex';
+
             // Получаем профиль
-            const { data: profile } = await supabaseClient.from('profiles').select('*').eq('id', user.id).single();
-            game.userProfile = profile;
-            
-            userNameEl.textContent = profile?.name || user.user_metadata?.full_name || user.email.split('@')[0];
-            
-            // Синхронизация статов
+            try {
+                const { data: profile, error } = await supabaseClient.from('profiles').select('*').eq('id', user.id).single();
+                if (error) throw error;
+                game.userProfile = profile;
+                userNameEl.textContent = profile?.name || user.user_metadata?.full_name || user.email.split('@')[0];
+            } catch (e) {
+                console.error("Ошибка загрузки профиля:", e);
+                userNameEl.textContent = user.user_metadata?.full_name || user.email.split('@')[0];
+            }
+
+            // Загрузка статистики
             await game.loadStatsFromCloud();
-            await game.syncStats();
         } else {
+            // Гость
             loginBtn.style.display = 'flex';
             userInfo.style.display = 'none';
+
+            // Скрываем настройки для гостей (согласно требованию "полностью меняется на кнопку ВХОД")
+            if (langToggle) langToggle.style.display = 'none';
+            if (themeToggle) themeToggle.style.display = 'none';
+            if (soundToggle) soundToggle.style.display = 'none';
+
             game.userProfile = null;
+            game.state.userCloudStats = null;
+
+            // Сбрасываем навигационные статы
+            const navScore = document.getElementById('navScore');
+            const navTerritories = document.getElementById('navTerritories');
+            if (navScore) navScore.textContent = '0';
+            if (navTerritories) navTerritories.textContent = '0';
+
+            game.updateStats(); // Сброс UI на главном экране
         }
-        game.updateStats();
     });
 });
 
+
+// ============================================
+// NEW DIPLOMACY SYSTEM
+// ============================================
+
+game.initDiplomacy = function () {
+    this.state.politicalMode.diplomacyRelations = {};
+};
+
+// Hook into start game
+const startPolGameWithDiplo = game.startPoliticalGame;
+game.startPoliticalGame = function (playerCountry) {
+    startPolGameWithDiplo.call(this, playerCountry);
+    setTimeout(() => {
+        this.initDiplomacy();
+    }, 1200);
+};
+
+// Global binding for UI buttons (retry until found)
+const diploBtnInterval = setInterval(() => {
+    const diploBtn = document.getElementById('openDiplomacyBtn');
+    const actionsBtn = document.getElementById('openActionsBtn');
+
+    if (diploBtn && actionsBtn) {
+        diploBtn.onclick = () => {
+            if (game.state.politicalMode) {
+                game.openDiplomacy();
+            }
+        };
+
+        actionsBtn.onclick = () => {
+            document.getElementById('actionsModal').style.display = 'block';
+        };
+
+        const btnArmy = document.getElementById('btnArmy');
+        if (btnArmy) {
+            btnArmy.onclick = () => {
+                document.getElementById('actionsModal').style.display = 'none';
+                game.openArmy();
+            };
+        }
+
+        const btnBarracks = document.getElementById('btnBarracks');
+        if (btnBarracks) {
+            btnBarracks.onclick = () => {
+                document.getElementById('actionsModal').style.display = 'none';
+                game.openBarracks();
+            };
+        }
+
+        const btnViewPol = document.getElementById('btnViewPolitical');
+        const btnViewProd = document.getElementById('btnViewProduction');
+        const btnViewBat = document.getElementById('btnViewBattle');
+        if (btnViewPol) btnViewPol.onclick = () => game.switchMapView('political');
+        if (btnViewProd) btnViewProd.onclick = () => game.switchMapView('production');
+        if (btnViewBat) btnViewBat.onclick = () => game.switchMapView('battle');
+
+        const btnStartBattle = document.getElementById('startBattleBtn');
+        if (btnStartBattle) btnStartBattle.onclick = () => game.executeBattle();
+
+        const btnStartDefense = document.getElementById('startDefenseBtn');
+        if (btnStartDefense) btnStartDefense.onclick = () => game.executeDefense();
+
+        const btnEconomy = document.getElementById('btnEconomy');
+        if (btnEconomy) {
+            btnEconomy.onclick = () => {
+                document.getElementById('actionsModal').style.display = 'none';
+                game.openEconomy();
+            };
+        }
+
+        const btnTrade = document.getElementById('btnTrade');
+        if (btnTrade) {
+            btnTrade.onclick = () => {
+                document.getElementById('actionsModal').style.display = 'none';
+                game.openTrade();
+            };
+        }
+
+        clearInterval(diploBtnInterval);
+
+    }
+}, 500);
+
+
+game.openEconomy = function () {
+    const modal = document.getElementById('economyModal');
+    modal.style.display = 'flex';
+    this.updateEconomyUI();
+};
+
+game.updateEconomyUI = function () {
+    const list = document.getElementById('economyResourceList');
+    list.innerHTML = '';
+
+    const pm = this.state.politicalMode;
+    const resources = ['food', 'leather', 'wood', 'coal', 'iron', 'oil', 'gold'];
+
+    const resIcons = {
+        food: 'fa-wheat-awn',
+        leather: 'fa-drum',
+        wood: 'fa-tree',
+        coal: 'fa-fire',
+        iron: 'fa-hammer',
+        oil: 'fa-oil-can',
+        gold: 'fa-gem'
+    };
+
+    resources.forEach(res => {
+        const level = pm.resourceLevels[res] || 1;
+        const upgradeCost = level * 300; // Increased cost for global upgrade
+
+        const card = document.createElement('div');
+        card.className = 'glass-card economy-card';
+        card.style.padding = '15px';
+        card.style.display = 'flex';
+        card.style.justifyContent = 'space-between';
+        card.style.alignItems = 'center';
+
+        card.innerHTML = `
+            <div class="eco-info">
+                <div style="font-weight: bold; color: var(--accent-gold); font-size: 1.1rem;">
+                    <i class="fas ${resIcons[res] || 'fa-cube'}"></i> ${this.getResourceName(res)}
+                </div>
+                <div style="font-size: 0.9rem; color: #aaa;">Уровень технологии: ${level}</div>
+                <div style="font-size: 0.85rem; color: #81c784;">Эффективность: +${level} на каждой территории</div>
+            </div>
+            <button class="historical-btn" onclick="game.upgradeResource('${res}')" ${pm.resources.coins < upgradeCost ? 'disabled' : ''}>
+                <i class="fas fa-arrow-up"></i> ${upgradeCost} <i class="fas fa-coins"></i>
+            </button>
+        `;
+        list.appendChild(card);
+    });
+};
+
+game.upgradeResource = function (res) {
+    const pm = this.state.politicalMode;
+    const level = pm.resourceLevels[res] || 1;
+    const upgradeCost = level * 300;
+
+    if (pm.resources.coins >= upgradeCost) {
+        pm.resources.coins -= upgradeCost;
+        pm.resourceLevels[res] = level + 1;
+        this.updateResourceUI();
+        this.updateEconomyUI();
+
+        this.showNotification(`Технология добычи (${this.getResourceName(res)}) улучшена до уровня ${level + 1}!`, 'success');
+    } else {
+        this.showNotification("Недостаточно монет в казне!", 'error');
+    }
+};
+
+
+game.openArmy = function () {
+    const pm = game.state.politicalMode;
+
+    if (!pm.modernization) pm.modernization = ['soldier', 'at_gun', 'howitzer', 'tank', 'fighter', 'bomber'];
+    if (!pm.army) pm.army = {};
+    if (pm.resources.coins === undefined) pm.resources.coins = 200;
+    if (!pm.productionQueue) pm.productionQueue = [];
+
+    game.units.forEach(u => {
+        if (pm.army[u.id] === undefined) pm.army[u.id] = 0;
+    });
+
+    const modal = document.getElementById('armyModal');
+    if (modal) modal.style.display = 'flex';
+
+    game.switchArmyTab('comp');
+    game.updateArmyUI();
+};
+
+game.openBarracks = function () {
+    game.openArmy();
+    game.switchArmyTab('barracks');
+};
+
+game.switchArmyTab = function (tab) {
+    console.log("[ARMY] Switching to tab:", tab);
+
+    // Debug alert to confirm the function is called
+    // alert("Switching to tab: " + tab);
+
+    const sections = {
+        'comp': 'armyCompSection',
+        'barracks': 'barracksSection',
+        'modernization': 'modernizationSection'
+    };
+    const tabs = {
+        'comp': 'tabArmyComp',
+        'barracks': 'tabBarracks',
+        'modernization': 'tabModernization'
+    };
+
+    try {
+        Object.keys(sections).forEach(key => {
+            const sectionEl = document.getElementById(sections[key]);
+            const tabEl = document.getElementById(tabs[key]);
+
+            if (sectionEl) {
+                // Если активна - показываем, иначе скрываем
+                if (key === tab) {
+                    sectionEl.style.setProperty('display', 'flex', 'important');
+                    sectionEl.style.flexDirection = 'column';
+                } else {
+                    sectionEl.style.setProperty('display', 'none', 'important');
+                }
+            }
+            if (tabEl) {
+                if (key === tab) {
+                    tabEl.classList.add('active');
+                } else {
+                    tabEl.classList.remove('active');
+                }
+            }
+        });
+
+        if (tab === 'modernization') {
+            game.updateModernizationUI();
+        }
+    } catch (e) {
+        console.error("[ARMY] Error switching tabs:", e);
+        // alert("Error in switchArmyTab: " + e.message);
+    }
+};
+
+game.updateModernizationUI = function () {
+    const pm = game.state.politicalMode;
+    const list = document.getElementById('modernizationUnitsList');
+    if (!list) return;
+    list.innerHTML = '';
+
+    // Юниты, которые можно купить (есть coinCost и еще не куплены)
+    const availableToBuy = game.units.filter(u => u.coinCost && !(pm.modernization || []).includes(u.id));
+
+    if (availableToBuy.length === 0) {
+        list.innerHTML = '<p style="grid-column: 1/-1; text-align: center; color: #4caf50; padding: 30px; background: rgba(76,175,80,0.1); border-radius: 10px; border: 1px dashed #4caf50;">🎉 Все доступные технологии уже изучены!</p>';
+        return;
+    }
+
+    availableToBuy.forEach(unit => {
+        const card = document.createElement('div');
+        card.className = 'glass-card';
+        card.style.padding = '20px';
+        card.style.border = '1px solid rgba(212,175,55,0.3)';
+        card.style.transition = 'transform 0.3s';
+
+        card.innerHTML = `
+            <div style="display: flex; gap: 15px; margin-bottom: 15px;">
+                <div style="font-size: 2.5rem;">${this.getUnitIcon(unit.id)}</div>
+                <div style="flex: 1;">
+                    <h4 style="margin: 0; color: var(--accent-gold);">${unit.name}</h4>
+                    <div style="font-size: 0.85rem; color: #ffd700; font-weight: bold;"><i class="fas fa-coins"></i> ${unit.coinCost} монет</div>
+                </div>
+            </div>
+            <div style="font-size: 0.8rem; color: #ccc; margin-bottom: 15px; line-height: 1.4;">
+                ${this.getUnitDescription(unit.id)}
+            </div>
+            <button class="historical-btn" style="width: 100%;" onclick="game.buyModernization('${unit.id}')">
+                <i class="fas fa-shopping-cart"></i> Купить чертежи
+            </button>
+        `;
+        list.appendChild(card);
+    });
+};
+
+game.getUnitDescription = function (id) {
+    const desc = {
+        sniper: '<strong>Специальность:</strong> Не исчезает при победе (остается в строю). Сильный точечный урон.',
+        medic: '<strong>Специальность:</strong> После победы возвращает 10% от общих потерь (не стакается).',
+        vdv: '<strong>Специальность:</strong> Элитная пехота с повышенной силой атаки.',
+        btr: '<strong>Специальность:</strong> Дает +15 силы каждому Солдату в составе (требует БТР в строю).',
+        carrier: '<strong>Специальность:</strong> Дает +50 к общей силе, если в составе есть Истребители или Бомбардировщики.'
+    };
+    return desc[id] || 'Новый тип войск для вашей армии.';
+};
+
+game.buyModernization = function (unitId) {
+    const pm = this.state.politicalMode;
+    const unit = this.units.find(u => u.id === unitId);
+    if (!unit) return;
+
+    if (pm.resources.coins < unit.coinCost) {
+        this.showNotification("Недостаточно монет в казне!", 'error');
+        this.playSound('wrong');
+        return;
+    }
+
+    pm.resources.coins -= unit.coinCost;
+    if (!pm.modernization) pm.modernization = ['soldier', 'at_gun', 'howitzer', 'tank', 'fighter', 'bomber'];
+    pm.modernization.push(unitId);
+
+    this.updateResourceUI();
+    this.updateModernizationUI();
+    this.updateArmyUI();
+
+    this.showNotification(`Чертежи юнита "${unit.name}" успешно приобретены!`, 'success');
+    this.addNews(`Модернизация: Освоено производство ${unit.name}`, 'production');
+    if (this.playSound) this.playSound('correct');
+};
+game.updateArmyUI = function () {
+    const pm = this.state.politicalMode;
+
+    // 1. Подсчет общего количества юнитов и расхода
+    let totalUnits = 0;
+    for (let uid in pm.army) {
+        totalUnits += pm.army[uid];
+    }
+
+    const maintenance = totalUnits * 6;
+
+    // Обновляем UI в панели экономики
+    const mCostEl = document.getElementById('maintenanceCost');
+    const mPowerEl = document.getElementById('manpowerCount');
+    if (mCostEl) mCostEl.textContent = maintenance;
+    if (mPowerEl) mPowerEl.textContent = totalUnits;
+
+    // 2. Army Composition
+    const armyList = document.getElementById('armyList');
+    armyList.innerHTML = '';
+
+    for (let unitId in pm.army) {
+        const count = pm.army[unitId];
+        const unitData = game.units.find(u => u.id === unitId);
+        if (unitData && count > 0) {
+            const card = document.createElement('div');
+            card.className = 'glass-card';
+            card.style.padding = '15px';
+            card.style.textAlign = 'center';
+            card.innerHTML = `
+                <div style="font-size: 2rem; margin-bottom: 5px;">${game.getUnitIcon(unitId)}</div>
+                <div style="font-weight: bold; color: var(--accent-gold);">${unitData.name}</div>
+                <div style="font-size: 1.5rem; font-weight: 900;">${count}</div>
+                <div style="font-size: 0.8rem; color: #aaa;">Сила: ${unitData.power * count}</div>
+            `;
+            armyList.appendChild(card);
+        }
+    }
+
+    if (armyList.innerHTML === '') {
+        armyList.innerHTML = '<p style="grid-column: 1/-1; text-align: center; color: #888; padding: 20px;">Ваша армия пуста. Посетите казарму!</p>';
+    }
+
+    // 3. Production Queue
+    const queueList = document.getElementById('productionQueueList');
+    queueList.innerHTML = '';
+    pm.productionQueue.forEach((item, index) => {
+        const unit = game.units.find(u => u.id === item.unitId);
+        const div = document.createElement('div');
+        div.className = 'glass-card';
+        div.style.display = 'flex';
+        div.style.justifyContent = 'space-between';
+        div.style.padding = '10px 20px';
+        div.style.borderLeft = '4px solid var(--accent-gold)';
+        div.innerHTML = `
+            <span><strong>${unit.name}</strong></span>
+            <span style="color: var(--accent-gold);">Будет готов через: <strong>${item.turnsLeft}</strong> ходов</span>
+        `;
+        queueList.appendChild(div);
+    });
+
+    // 4. Available Units (Barracks) - Filter by modernization
+    const barracksList = document.getElementById('availableUnitsList');
+    barracksList.innerHTML = '';
+
+    // Только разблокированные юниты
+    const unlockedUnits = game.units.filter(u => (pm.modernization || []).includes(u.id));
+
+    unlockedUnits.forEach(unit => {
+        const card = document.createElement('div');
+        card.className = 'glass-card';
+        card.style.padding = '20px';
+        card.style.border = '1px solid rgba(212,175,55,0.2)';
+
+        let costHtml = '';
+        for (let res in unit.cost) {
+            costHtml += `<span style="margin-right: 10px; font-size: 0.9rem;"><i class="${game.getResourceIcon(res)}"></i> ${unit.cost[res]}</span>`;
+        }
+
+        card.innerHTML = `
+            <div style="display: flex; gap: 15px; margin-bottom: 15px;">
+                <div style="font-size: 2.5rem;">${game.getUnitIcon(unit.id)}</div>
+                <div style="flex: 1;">
+                    <h4 style="margin: 0; color: var(--accent-gold);">${unit.name}</h4>
+                    <div style="font-size: 0.85rem; color: #4caf50;">Сила: ${unit.power}</div>
+                    <div style="font-size: 0.85rem; color: #ffeb3b;">Производство: ${unit.turns} ходов</div>
+                </div>
+            </div>
+            <div style="margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 5px;">
+                ${costHtml}
+            </div>
+            <button class="historical-btn" style="width: 100%;" onclick="game.orderUnit('${unit.id}')">Заказать</button>
+        `;
+        barracksList.appendChild(card);
+    });
+};
+
+
+game.getUnitIcon = function (id) {
+    const icons = {
+        soldier: '🪖',
+        tank: '🚜',
+        fighter: '🛩',
+        bomber: '✈️',
+        at_gun: '💥',
+        howitzer: '🎯',
+        sniper: '🎯',
+        medic: '💊',
+        vdv: '🪂',
+        btr: '🚐',
+        carrier: '🚢'
+    };
+    return icons[id] || '⚔️';
+};
+
+game.getResourceIcon = function (res) {
+    const icons = {
+        wood: 'fas fa-tree',
+        coal: 'fas fa-fire',
+        iron: 'fas fa-hammer',
+        oil: 'fas fa-oil-can',
+        gold: 'fas fa-gem',
+        food: 'fas fa-wheat-awn',
+        leather: 'fas fa-drum',
+        manpower: 'fas fa-users',
+        coins: 'fas fa-coins'
+    };
+    return icons[res] || 'fas fa-cube';
+};
+
+game.orderUnit = function (unitId) {
+    const pm = this.state.politicalMode;
+    const unit = this.units.find(u => u.id === unitId);
+    if (!unit) return;
+
+    // Check resources
+    for (let res in unit.cost) {
+        if ((pm.resources[res] || 0) < unit.cost[res]) {
+            this.showNotification(`Недостаточно ресурсов: ${this.getResourceName(res)}!`, 'error');
+            this.playSound('wrong');
+            return;
+        }
+    }
+
+    // Deduct resources
+    for (let res in unit.cost) {
+        pm.resources[res] -= unit.cost[res];
+    }
+
+    this.updateResourceUI();
+    this.playSound('click');
+
+    // Add to queue
+    pm.productionQueue.push({
+        unitId: unitId,
+        turnsLeft: unit.turns
+    });
+
+    this.addNews(`Заказано производство: ${unit.name}`, 'neutral');
+    this.updateArmyUI();
+    if (this.playSound) this.playSound('correct');
+};
+
+game.processProduction = function () {
+    const pm = this.state.politicalMode;
+    if (!pm.productionQueue) return;
+
+    const completedIndices = [];
+    pm.productionQueue.forEach((item, index) => {
+        item.turnsLeft--;
+        if (item.turnsLeft <= 0) {
+            if (item.isNavy) {
+                if (!pm.navy) pm.navy = { sub_m: 0, sub_b: 0, sub_c: 0, landing_ship: 0, anti_sub: 0 };
+                pm.navy[item.unitId] = (pm.navy[item.unitId] || 0) + 1;
+                this.addNews(`Корабль спущен на воду: ${this.navyUnits[item.unitId].name}`, 'correct');
+            } else {
+                pm.army[item.unitId] = (pm.army[item.unitId] || 0) + 1;
+                const unit = this.units.find(u => u.id === item.unitId);
+                this.addNews(`Производство завершено: ${unit ? unit.name : item.unitId}`, 'correct');
+            }
+            completedIndices.push(index);
+        }
+    });
+
+    // Remove completed from queue (backwards)
+    for (let i = completedIndices.length - 1; i >= 0; i--) {
+        pm.productionQueue.splice(completedIndices[i], 1);
+    }
+
+    if (completedIndices.length > 0) {
+        const armyModal = document.getElementById('armyModal');
+        if (armyModal && armyModal.style.display !== 'none' && armyModal.style.display !== '') {
+            if (this.updateArmyUI) this.updateArmyUI();
+        }
+        const navyModal = document.getElementById('navyModal');
+        if (navyModal && navyModal.style.display !== 'none' && navyModal.style.display !== '') {
+            if (this.renderNavyUI) this.renderNavyUI();
+        }
+    }
+};
+
+game.getDiplomacyRelation = function (countryA, countryB) {
+    if (!countryA || !countryB || countryA === countryB || countryB === 'neutral') return 'neutral';
+    const rels = this.state.politicalMode.diplomacyRelations;
+    if (!rels[countryA]) rels[countryA] = {};
+    if (!rels[countryB]) rels[countryB] = {};
+    return rels[countryA][countryB] || 'neutral';
+};
+
+game.setDiplomacyRelation = function (countryA, countryB, status) {
+    if (!countryA || !countryB || countryA === countryB || countryB === 'neutral') return;
+    const rels = this.state.politicalMode.diplomacyRelations;
+    if (!rels[countryA]) rels[countryA] = {};
+    if (!rels[countryB]) rels[countryB] = {};
+
+    rels[countryA][countryB] = status;
+    rels[countryB][countryA] = status; // Relations are mutual
+
+    // Auto-update UI if open
+    if (document.getElementById('diplomacyModal').style.display === 'flex') {
+        const selectedId = document.getElementById('diplomacyModal').dataset.selectedCountry;
+        if (selectedId === countryA || selectedId === countryB) {
+            this.selectDiplomacyCountry(selectedId);
+        }
+    }
+};
+
+game.refreshMapStyles = function () {
+    this.state.territories.forEach(t => this.updateTerritoryStyle(t.id));
+};
+
+game.openDiplomacy = function () {
+    const modal = document.getElementById('diplomacyModal');
+    const list = document.getElementById('diplomacyCountryList');
+    list.innerHTML = '';
+
+    const pm = this.state.politicalMode;
+
+    pm.botCountries.forEach(bot => {
+        const btn = document.createElement('button');
+        btn.className = 'historical-btn';
+        btn.style.width = '100%';
+        btn.style.textAlign = 'left';
+        btn.style.background = 'rgba(0,0,0,0.5)';
+        btn.style.marginBottom = '5px';
+
+        const rel = this.getDiplomacyRelation('player', bot.name);
+        let icon = '🕊️';
+        if (rel === 'war') icon = '⚔️';
+        else if (rel === 'ally') icon = '🤝';
+
+        btn.innerHTML = `${icon} ${bot.empireName}`;
+        btn.onclick = () => this.selectDiplomacyCountry(bot.name);
+        list.appendChild(btn);
+    });
+
+    // Сброс UI при открытии
+    document.getElementById('diploEmptyState').style.display = 'flex';
+    document.getElementById('diploInfoArea').style.display = 'none';
+    modal.dataset.selectedCountry = '';
+    modal.style.display = 'flex';
+};
+
+game.selectDiplomacyCountry = function (botName) {
+    const pm = this.state.politicalMode;
+    const bot = pm.botCountries.find(b => b.name === botName);
+    if (!bot) return;
+
+    // UI visibility
+    document.getElementById('diploEmptyState').style.display = 'none';
+    document.getElementById('diploInfoArea').style.display = 'block';
+
+    document.getElementById('diplomacyModal').dataset.selectedCountry = botName;
+    document.getElementById('diploSelectedName').textContent = bot.empireName;
+
+    // Подсчет статистики
+    const botTerritories = this.state.territories.filter(t => t.owner === botName);
+    document.getElementById('diploStatTerritories').textContent = botTerritories.length;
+    document.getElementById('diploStatPower').textContent = this.calculateTotalPower(botName);
+
+    const rel = this.getDiplomacyRelation('player', botName);
+
+    const btnWar = document.getElementById('diploBtnWar');
+    const btnAlly = document.getElementById('diploBtnAlliance');
+    const btnBreak = document.getElementById('diploBtnBreak');
+    const btnPeace = document.getElementById('diploBtnPeace');
+    const statusText = document.getElementById('diploStatus');
+
+    btnWar.style.display = 'none';
+    btnAlly.style.display = 'none';
+    btnBreak.style.display = 'none';
+    btnPeace.style.display = 'none';
+
+    btnWar.onclick = () => this.declareWar(botName);
+    btnAlly.onclick = () => this.offerAlliance(botName);
+    btnBreak.onclick = () => this.breakAlliance(botName);
+    btnPeace.onclick = () => this.offerPeace(botName);
+
+    if (rel === 'neutral') {
+        statusText.innerHTML = '<span style="color:#aaa;"><i class="fas fa-dove"></i> Нейтралитет</span>';
+        btnWar.style.display = 'block';
+        btnAlly.style.display = 'block';
+    } else if (rel === 'war') {
+        statusText.innerHTML = '<span style="color:#ef5350;"><i class="fas fa-swords"></i> Состояние войны</span>';
+        btnPeace.style.display = 'block';
+    } else if (rel === 'ally') {
+        statusText.innerHTML = '<span style="color:#4caf50;"><i class="fas fa-handshake"></i> Союзники</span>';
+        btnBreak.style.display = 'block';
+    }
+};
+
+game.offerPeace = async function (botName) {
+    const bot = this.state.politicalMode.botCountries.find(b => b.name === botName);
+
+    const playerPower = this.calculateTotalPower('player');
+    const botPower = this.calculateTotalPower(botName);
+
+    let chance = 0.2; // Базовый шанс 20%
+    if (playerPower > botPower * 1.5) chance = 0.5;
+    if (playerPower > botPower * 3) chance = 0.8;
+
+    if (Math.random() < chance) {
+        await this.showAlert(`${bot.empireName} принимает ваше предложение о мире. Боевые действия прекращены.`, 'Мирный договор');
+        this.setDiplomacyRelation('player', botName, 'neutral');
+        if (this.state.mapViewMode === 'battle') this.refreshMapStyles();
+        this.addNews(`Заключен мир с ${bot.empireName}.`, 'ally');
+    } else {
+        await this.showAlert(`${bot.empireName} отклоняет предложение. "Мы не сложим оружие, пока не добьемся своего!"`, 'Отказ');
+        if (this.playSound) this.playSound('wrong');
+    }
+    this.selectDiplomacyCountry(botName);
+};
+
+game.calculateTotalPower = function (owner) {
+    const territories = this.state.territories.filter(t => t.owner === owner);
+    let power = 0;
+
+    if (owner === 'player') {
+        const pm = this.state.politicalMode;
+        for (let uid in pm.army) {
+            const unitData = this.units.find(u => u.id === uid);
+            if (unitData) power += pm.army[uid] * unitData.power;
+        }
+    } else {
+        const bot = this.state.politicalMode.botCountries.find(b => b.name === owner);
+        if (bot && bot.army) {
+            for (let uid in bot.army) {
+                const unitData = this.units.find(u => u.id === uid);
+                if (unitData) power += bot.army[uid] * unitData.power;
+            }
+        }
+    }
+
+    territories.forEach(t => {
+        if (t.garrison) {
+            for (let uid in t.garrison) {
+                const unitData = this.units.find(u => u.id === uid);
+                if (unitData) power += t.garrison[uid] * unitData.power;
+            }
+        }
+    });
+
+    return power;
+};
+
+game.declareWar = async function (botName) {
+    const bot = this.state.politicalMode.botCountries.find(b => b.name === botName);
+    if (await this.showConfirm(`Вы уверены, что хотите объявить войну государству ${bot.empireName}?`, 'Объявление войны')) {
+        this.setDiplomacyRelation('player', botName, 'war');
+        if (this.state.mapViewMode === 'battle') this.refreshMapStyles();
+        if (this.playSound) this.playSound('wrong');
+    }
+};
+
+game.offerAlliance = async function (botName) {
+    const bot = this.state.politicalMode.botCountries.find(b => b.name === botName);
+
+    // Evaluate power
+    const playerTerritories = this.state.territories.filter(t => t.owner === 'player').length;
+
+    if (playerTerritories >= 5 || Math.random() > 0.5) {
+        await this.showAlert(`${bot.empireName} принимает ваше предложение о союзе!`, 'Альянс заключен');
+        this.setDiplomacyRelation('player', botName, 'ally');
+        if (this.state.mapViewMode === 'battle') this.refreshMapStyles();
+        if (this.playSound) this.playSound('correct');
+    } else {
+        await this.showAlert(`${bot.empireName} отвергает ваше предложение. Вы слишком слабы.`, 'Отказ');
+    }
+};
+
+game.breakAlliance = async function (botName) {
+    const bot = this.state.politicalMode.botCountries.find(b => b.name === botName);
+    if (await this.showConfirm(`Разорвать союз с ${bot.empireName}? Статус станет нейтральным.`, 'Разрыв союза')) {
+        this.setDiplomacyRelation('player', botName, 'neutral');
+        if (this.state.mapViewMode === 'battle') this.refreshMapStyles();
+    }
+};
+
+// ===== BATTLE SYSTEM FUNCTIONS =====
+
+game.openBattleModal = function (territoryId) {
+    const territory = this.state.territories.find(t => t.id === territoryId);
+    if (!territory) return;
+
+    this.state.politicalMode.battleTargetId = territoryId;
+    this.state.politicalMode.deployedUnits = {}; // { soldier: 0, tank: 0, ... }
+
+    const bot = this.state.politicalMode.botCountries.find(b => b.name === territory.owner);
+    document.getElementById('battleEnemyCountry').textContent = bot ? bot.empireName : (territory.owner === 'neutral' ? 'Нейтралы' : '-');
+
+    // Расчет силы врага (Защитник: База 150 + Юниты)
+    const basePower = 150;
+    let unitPower = 0;
+    const enemyUnitsList = document.getElementById('battleEnemyUnits');
+    enemyUnitsList.innerHTML = `
+        <div class="battle-unit-item" style="border-left: 4px solid #ef5350;">
+            <div class="unit-info">
+                <i class="fas fa-fort-awesome"></i>
+                <span class="unit-name">Местный гарнизон (База)</span>
+            </div>
+            <span class="unit-count">${basePower}</span>
+        </div>
+    `;
+
+    // Юниты защитника добавляются к базе
+    if (territory.garrison) {
+        for (let uid in territory.garrison) {
+            const count = territory.garrison[uid];
+            if (count > 0) {
+                const unitDef = this.units.find(u => u.id === uid);
+                const power = count * (unitDef ? unitDef.power : 5);
+                unitPower += power;
+
+                const item = document.createElement('div');
+                item.className = 'battle-unit-item';
+                item.innerHTML = `
+                    <div class="unit-info">
+                        <span style="font-size: 1.2rem; margin-right: 5px;">${this.getUnitIcon(uid)}</span>
+                        <span class="unit-name">${unitDef ? unitDef.name : uid}</span>
+                    </div>
+                    <span class="unit-count">${count}</span>
+                `;
+                enemyUnitsList.appendChild(item);
+            }
+        }
+    }
+
+    document.getElementById('battleEnemyPower').textContent = basePower + unitPower;
+
+
+
+    // Если у территории есть конкретные юниты (как у игрока)
+    if (territory.garrison) {
+        for (let uid in territory.garrison) {
+            const count = territory.garrison[uid];
+            if (count > 0) {
+                const unitDef = this.units.find(u => u.id === uid);
+                const power = count * (unitDef ? unitDef.power : 5);
+                unitPower += power;
+
+                const item = document.createElement('div');
+                item.className = 'battle-unit-item';
+                item.innerHTML = `
+                    <div class="unit-info">
+                        <span style="font-size: 1.2rem; margin-right: 5px;">${this.getUnitIcon(uid)}</span>
+                        <span class="unit-name">${unitDef ? unitDef.name : uid}</span>
+                    </div>
+                    <span class="unit-count">${count}</span>
+                `;
+                enemyUnitsList.appendChild(item);
+            }
+        }
+    } else {
+        // Совместимость со старым форматом (если остался)
+        const oldArmy = territory.army || 0;
+        unitPower = oldArmy * 5;
+        if (oldArmy > 0) {
+            const item = document.createElement('div');
+            item.className = 'battle-unit-item';
+            item.innerHTML = `
+                <div class="unit-info"><i class="fas fa-users"></i><span class="unit-name">Войска</span></div>
+                <span class="unit-count">${oldArmy}</span>
+            `;
+            enemyUnitsList.appendChild(item);
+        }
+    }
+
+    document.getElementById('battleEnemyPower').textContent = basePower + unitPower;
+
+
+    // Список выбора юнитов игрока
+    this.updateBattlePlayerUnitsUI();
+
+    document.getElementById('battleModal').style.display = 'flex';
+};
+
+game.updateBattlePlayerUnitsUI = function () {
+    const pm = this.state.politicalMode;
+    const container = document.getElementById('battlePlayerUnits');
+    container.innerHTML = '';
+
+    // Игрок АТАКУЕТ - база 150 НЕ применяется
+    let totalPower = 0;
+
+    const targetTerritory = this.state.territories.find(t => t.id === pm.battleTargetId);
+    const isOverseas = targetTerritory && targetTerritory.isOverseasAttack;
+
+    if (!isOverseas) {
+        this.units.forEach(unit => {
+            const available = pm.army[unit.id] || 0;
+            const deployed = pm.deployedUnits[unit.id] || 0;
+
+            if (available > 0) {
+                totalPower += deployed * unit.power;
+
+                const item = document.createElement('div');
+                item.className = 'battle-unit-item';
+                item.innerHTML = `
+                    <div class="unit-info">
+                        <span style="font-size: 1.2rem; margin-right: 5px;">${this.getUnitIcon(unit.id)}</span>
+                        <span class="unit-name">${unit.name} (Запас: ${available})</span>
+                    </div>
+                    <div class="unit-selector">
+                        <button onclick="game.changeDeployedUnit('${unit.id}', -1)" ${deployed === 0 ? 'disabled' : ''}>-</button>
+                        <span>${deployed}</span>
+                        <button onclick="game.changeDeployedUnit('${unit.id}', 1)" ${deployed >= available ? 'disabled' : ''}>+</button>
+                    </div>
+                `;
+                container.appendChild(item);
+            }
+        });
+
+        // Расчет специальных бонусов
+        const deployed = pm.deployedUnits || {};
+        let bonusPower = 0;
+        let bonusList = [];
+
+        if ((deployed.btr || 0) > 0 && (deployed.soldier || 0) > 0) {
+            const btrBonus = deployed.soldier * 15;
+            bonusPower += btrBonus;
+            bonusList.push(`<div style="color: #4caf50; font-size: 0.85rem;"><i class="fas fa-plus-circle"></i> БТР: +${btrBonus} к силе солдат</div>`);
+        }
+
+        if ((deployed.carrier || 0) > 0 && ((deployed.fighter || 0) > 0 || (deployed.bomber || 0) > 0)) {
+            bonusPower += 50;
+            bonusList.push(`<div style="color: #4caf50; font-size: 0.85rem;"><i class="fas fa-plus-circle"></i> Авианосец: +50 к силе авиации</div>`);
+        }
+
+        totalPower += bonusPower;
+    }
+
+    if (pm.navy) {
+        for (let unitId in pm.navy) {
+            const unitDef = this.navyUnits ? this.navyUnits[unitId] : null;
+            if (!unitDef) continue;
+            
+            const available = pm.navy[unitId] || 0;
+            const deployed = pm.deployedUnits[unitId] || 0;
+
+            if (available > 0) {
+                totalPower += deployed * unitDef.power;
+
+                const item = document.createElement('div');
+                item.className = 'battle-unit-item';
+                item.innerHTML = `
+                    <div class="unit-info">
+                        <span style="font-size: 1.2rem; margin-right: 5px;"><i class="fas ${unitDef.icon}"></i></span>
+                        <span class="unit-name">${unitDef.name} (Запас: ${available})</span>
+                    </div>
+                    <div class="unit-selector">
+                        <button onclick="game.changeDeployedUnit('${unitId}', -1)" ${deployed === 0 ? 'disabled' : ''}>-</button>
+                        <span>${deployed}</span>
+                        <button onclick="game.changeDeployedUnit('${unitId}', 1)" ${deployed >= available ? 'disabled' : ''}>+</button>
+                    </div>
+                `;
+                container.appendChild(item);
+            }
+        }
+    }
+
+    if (bonusList.length > 0) {
+        const bonusDiv = document.createElement('div');
+        bonusDiv.style.marginTop = '10px';
+        bonusDiv.style.padding = '10px';
+        bonusDiv.style.background = 'rgba(76,175,80,0.1)';
+        bonusDiv.style.borderRadius = '5px';
+        bonusDiv.innerHTML = bonusList.join('');
+        container.appendChild(bonusDiv);
+    }
+
+    document.getElementById('battlePlayerPower').textContent = totalPower;
+
+    const enemyPower = parseInt(document.getElementById('battleEnemyPower').textContent);
+    const prediction = document.getElementById('battlePrediction');
+    const attackBtn = document.getElementById('startBattleBtn');
+
+    if (totalPower === 0) {
+        prediction.textContent = 'Выберите войска для атаки';
+        attackBtn.disabled = true;
+        attackBtn.style.opacity = '0.5';
+    } else {
+        attackBtn.disabled = false;
+        attackBtn.style.opacity = '1';
+        if (totalPower > enemyPower) {
+            prediction.innerHTML = '<span style="color:#4caf50;">⚔️ Вероятная победа! Превосходство: ' + (totalPower - enemyPower) + '</span>';
+        } else if (totalPower === enemyPower) {
+            prediction.innerHTML = '<span style="color:#ffeb3b;">⚖️ Силы равны. Результат непредсказуем.</span>';
+        } else {
+            prediction.innerHTML = '<span style="color:#ef5350;">⚠️ Риск поражения! Нехватка сил: ' + (enemyPower - totalPower) + '</span>';
+        }
+    }
+};
+
+game.changeDeployedUnit = function (unitId, delta) {
+    const pm = this.state.politicalMode;
+    
+    let available = pm.army[unitId] || 0;
+    if (pm.navy && pm.navy[unitId] !== undefined) {
+        available = pm.navy[unitId] || 0;
+    }
+    
+    if (!pm.deployedUnits) pm.deployedUnits = {};
+    const current = pm.deployedUnits[unitId] || 0;
+
+    let next = current + delta;
+    if (next < 0) next = 0;
+    if (next > available) next = available;
+
+    pm.deployedUnits[unitId] = next;
+    this.updateBattlePlayerUnitsUI();
+};
+
+game.executeBattle = function () {
+    const pm = this.state.politicalMode;
+    const territoryId = pm.battleTargetId;
+    const territory = this.state.territories.find(t => t.id === territoryId);
+    if (!territory) return;
+
+    const playerPower = parseInt(document.getElementById('battlePlayerPower').textContent);
+    const enemyPower = parseInt(document.getElementById('battleEnemyPower').textContent);
+
+    if (playerPower >= enemyPower) {
+        // ПОБЕДА ИГРОКА (Атака)
+        const remainingPower = playerPower - enemyPower;
+
+        territory.owner = 'player';
+        // При расчете выживших вычитаем 150, так как игрок теперь защитник
+        territory.army = Math.max(1, Math.floor(remainingPower / 5));
+
+        const hasMedic = (pm.deployedUnits.medic || 0) > 0;
+
+        for (let uid in pm.deployedUnits) {
+            const count = pm.deployedUnits[uid];
+            if (uid === 'sniper') continue; // Снайперы не умирают при победе
+
+            let loss = count;
+            if (hasMedic) {
+                const refund = Math.ceil(count * 0.1);
+                loss = Math.max(0, count - refund);
+            }
+            if (pm.army[uid] !== undefined) pm.army[uid] -= loss;
+            else if (pm.navy && pm.navy[uid] !== undefined) pm.navy[uid] -= loss;
+        }
+
+        this.addNews(`🚩 Победа! ${territory.name} захвачена!`, 'correct');
+        if (this.playSound) this.playSound('capture');
+    } else {
+        // ПОРАЖЕНИЕ ИГРОКА (Атака)
+        const reducedEnemyPower = enemyPower - playerPower;
+        // У бота остается база 150 + часть юнитов
+        territory.army = Math.max(1, Math.floor((reducedEnemyPower - 150) / 5));
+
+        for (let uid in pm.deployedUnits) {
+            if (pm.army[uid] !== undefined) pm.army[uid] -= pm.deployedUnits[uid];
+            else if (pm.navy && pm.navy[uid] !== undefined) pm.navy[uid] -= pm.deployedUnits[uid];
+        }
+        this.addNews(`❌ Поражение под ${territory.name}! Наши войска отступили.`, 'wrong');
+        if (this.playSound) this.playSound('wrong');
+    }
+
+    // Тратим очко действия при любом исходе битвы
+    pm.actionsLeft--;
+    this.updateActionsUI();
+
+    document.getElementById('battleModal').style.display = 'none';
+    this.updateArmyUI();
+    this.refreshMapStyles();
+};
+
+
+// ===== DEFENSE SYSTEM FUNCTIONS =====
+
+game.initiateBotAttack = function (source, target) {
+    if (!target || target.owner !== 'player') return;
+
+    const bot = this.state.politicalMode.botCountries.find(b => b.name === source.owner);
+    if (!bot) return;
+
+    // Бот выделяет юнитов из ГАРНИЗОНА исходной территории (source)
+    const attackingArmy = {};
+    let unitPower = 0;
+    const basePower = 150; // Базовая мощь атаки
+
+    if (source.garrison) {
+        for (let uid in source.garrison) {
+            if (source.garrison[uid] > 0) {
+                // Бот посылает 70% гарнизона в атаку
+                const count = Math.ceil(source.garrison[uid] * 0.7);
+                if (count > 0) {
+                    attackingArmy[uid] = count;
+                    source.garrison[uid] -= count;
+                    const unitDef = this.units.find(u => u.id === uid);
+                    unitPower += count * (unitDef ? unitDef.power : 5);
+                }
+            }
+        }
+    }
+
+    // Если гарнизон пуст, даем минимум
+    if (unitPower === 0) {
+        attackingArmy['soldier'] = 5;
+        unitPower = 25;
+    }
+
+    // Сохраняем данные об атаке (АТАКУЮЩИЙ: только сила юнитов, база 150 НЕ добавляется)
+    target.pendingAttack = {
+        attacker: source.owner,
+        attackerSourceId: source.id,
+        army: attackingArmy,
+        power: unitPower
+    };
+
+
+    this.addNews(`⚠️ ${bot.empireName} начал осаду ${target.name}! Требуется защита!`, 'war');
+    this.playSound('war');
+
+    this.updateTerritoryStyle(target.id);
+};
+
+
+
+game.openDefenseModal = function (territoryId) {
+    console.log(`[DEFENSE] Attempting to open modal for territory: ${territoryId}`);
+    const territory = this.state.territories.find(t => t.id === territoryId);
+
+    if (!territory) {
+        console.error(`[DEFENSE] Territory ${territoryId} not found!`);
+        return;
+    }
+    if (!territory.pendingAttack) {
+        console.warn(`[DEFENSE] Territory ${territoryId} has no pending attack!`);
+        return;
+    }
+
+    const attackData = territory.pendingAttack;
+    console.log(`[DEFENSE] Attack data found:`, attackData);
+
+    this.state.politicalMode.defenseTargetId = territoryId;
+    this.state.politicalMode.deployedDefenseUnits = {};
+
+
+    const bot = this.state.politicalMode.botCountries.find(b => b.name === attackData.attacker);
+    document.getElementById('defenseEnemyCountry').textContent = bot ? bot.empireName : attackData.attacker;
+
+    // Бот АТАКУЕТ - база 150 НЕ применяется
+    const enemyPower = attackData.power;
+    document.getElementById('defenseEnemyPower').textContent = enemyPower;
+
+
+
+    // Список атакующих сил
+    const enemyUnitsList = document.getElementById('defenseEnemyUnits');
+    enemyUnitsList.innerHTML = '';
+
+    for (let uid in attackData.army) {
+        const count = attackData.army[uid];
+        const unitDef = this.units.find(u => u.id === uid);
+        const item = document.createElement('div');
+        item.className = 'battle-unit-item';
+        item.innerHTML = `
+            <div class="unit-info">
+                <span style="font-size: 1.2rem; margin-right: 5px;">${this.getUnitIcon(uid)}</span>
+                <span class="unit-name">${unitDef ? unitDef.name : uid}</span>
+            </div>
+            <span class="unit-count">${count}</span>
+        `;
+        enemyUnitsList.appendChild(item);
+    }
+
+    // Список выбора юнитов игрока
+    this.updateDefensePlayerUnitsUI();
+
+    document.getElementById('defenseModal').style.display = 'flex';
+};
+
+
+game.updateDefensePlayerUnitsUI = function () {
+    const pm = this.state.politicalMode;
+    const territoryId = pm.defenseTargetId;
+    const territory = this.state.territories.find(t => t.id === territoryId);
+    if (!territory) return;
+
+    const container = document.getElementById('defensePlayerUnits');
+    container.innerHTML = '';
+
+    let totalPower = 0;
+    const basePower = 150;
+    totalPower += basePower;
+
+
+    const garrisonItem = document.createElement('div');
+    garrisonItem.className = 'battle-unit-item';
+    garrisonItem.style.borderLeft = '4px solid #42a5f5';
+    garrisonItem.innerHTML = `
+        <div class="unit-info">
+            <i class="fas fa-fort-awesome"></i>
+            <span class="unit-name">Местный гарнизон (База)</span>
+        </div>
+        <span class="unit-count">${basePower}</span>
+    `;
+    container.appendChild(garrisonItem);
+
+    // Если на территории УЖЕ есть юниты (гарнизон)
+    if (territory.garrison) {
+        for (let uid in territory.garrison) {
+            const count = territory.garrison[uid];
+            if (count > 0) {
+                const unitDef = this.units.find(u => u.id === uid);
+                totalPower += count * (unitDef ? unitDef.power : 5);
+                const item = document.createElement('div');
+                item.className = 'battle-unit-item';
+                item.style.opacity = '0.8';
+                item.innerHTML = `
+                    <div class="unit-info">
+                        <span style="font-size: 1.2rem; margin-right: 5px;">${this.getUnitIcon(uid)}</span>
+                        <span class="unit-name">${unitDef ? unitDef.name : uid} (Гарнизон)</span>
+                    </div>
+                    <span class="unit-count">${count}</span>
+                `;
+                container.appendChild(item);
+            }
+        }
+    }
+
+    // 2. Раздел «АРМИЯ (РЕЗЕРВЫ)»
+    const armyHeader = document.createElement('div');
+    armyHeader.style.cssText = 'margin-top: 20px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px; color: #aaa; font-size: 0.8rem; font-weight: bold; letter-spacing: 1px;';
+    armyHeader.innerHTML = 'ПОДДЕРЖКА ИЗ ШТАБА';
+    container.appendChild(armyHeader);
+
+    let hasReserves = false;
+    this.units.forEach(unit => {
+        const available = pm.army[unit.id] || 0;
+        const deployed = pm.deployedDefenseUnits[unit.id] || 0;
+
+        if (available > 0) {
+            hasReserves = true;
+            totalPower += deployed * unit.power;
+
+            const item = document.createElement('div');
+            item.className = 'battle-unit-item';
+            item.innerHTML = `
+                <div class="unit-info">
+                    <span style="font-size: 1.2rem; margin-right: 5px;">${this.getUnitIcon(unit.id)}</span>
+                    <span class="unit-name">${unit.name} (В наличии: ${available})</span>
+                </div>
+                <div class="unit-selector">
+                    <button class="selector-btn" onclick="game.changeDeployedDefenseUnit('${unit.id}', -1)" ${deployed === 0 ? 'disabled' : ''}>-</button>
+                    <span class="selector-count">${deployed}</span>
+                    <button class="selector-btn" onclick="game.changeDeployedDefenseUnit('${unit.id}', 1)" ${deployed >= available ? 'disabled' : ''}>+</button>
+                </div>
+            `;
+            container.appendChild(item);
+        }
+    });
+
+    // Расчет специальных бонусов (Гарнизон + Резервы)
+    const localGarrison = territory.garrison || {};
+    const deployedReserves = pm.deployedDefenseUnits || {};
+
+    const totalSoldiers = (localGarrison.soldier || 0) + (deployedReserves.soldier || 0);
+    const totalBTRs = (localGarrison.btr || 0) + (deployedReserves.btr || 0);
+    const totalCarriers = (localGarrison.carrier || 0) + (deployedReserves.carrier || 0);
+    const totalFighters = (localGarrison.fighter || 0) + (deployedReserves.fighter || 0);
+    const totalBombers = (localGarrison.bomber || 0) + (deployedReserves.bomber || 0);
+
+    let bonusPower = 0;
+    let bonusList = [];
+
+    if (totalBTRs > 0 && totalSoldiers > 0) {
+        const btrBonus = totalSoldiers * 15;
+        bonusPower += btrBonus;
+        bonusList.push(`<div style="color: #4caf50; font-size: 0.85rem;"><i class="fas fa-plus-circle"></i> БТР: +${btrBonus} к силе солдат</div>`);
+    }
+
+    if (totalCarriers > 0 && (totalFighters > 0 || totalBombers > 0)) {
+        bonusPower += 50;
+        bonusList.push(`<div style="color: #4caf50; font-size: 0.85rem;"><i class="fas fa-plus-circle"></i> Авианосец: +50 к силе авиации</div>`);
+    }
+
+    totalPower += bonusPower;
+
+    if (bonusList.length > 0) {
+        const bonusDiv = document.createElement('div');
+        bonusDiv.style.marginTop = '15px';
+        bonusDiv.style.padding = '10px';
+        bonusDiv.style.background = 'rgba(76,175,80,0.1)';
+        bonusDiv.style.borderRadius = '5px';
+        bonusDiv.innerHTML = '<div style="font-weight: bold; font-size: 0.8rem; margin-bottom: 5px;">Бонусы обороны:</div>' + bonusList.join('');
+        container.appendChild(bonusDiv);
+    }
+
+    document.getElementById('defensePlayerPower').textContent = totalPower;
+
+    const enemyPower = parseInt(document.getElementById('defenseEnemyPower').textContent);
+    const prediction = document.getElementById('defensePrediction');
+    const defenseBtn = document.getElementById('startDefenseBtn');
+
+    if (totalPower > enemyPower) {
+        prediction.innerHTML = '<span style="color:#4caf50;">🛡️ Оборона надежна! Превосходство: ' + (totalPower - enemyPower) + '</span>';
+    } else if (totalPower === enemyPower) {
+        prediction.innerHTML = '<span style="color:#ffeb3b;">⚖️ Силы равны. Есть риск прорыва!</span>';
+    } else {
+        prediction.innerHTML = '<span style="color:#ef5350;">🚨 Оборона прорвана! Нехватка сил: ' + (enemyPower - totalPower) + '</span>';
+    }
+};
+
+game.changeDeployedDefenseUnit = function (unitId, delta) {
+    const pm = this.state.politicalMode;
+    const available = pm.army[unitId] || 0;
+    if (!pm.deployedDefenseUnits) pm.deployedDefenseUnits = {};
+    const current = pm.deployedDefenseUnits[unitId] || 0;
+
+    let next = current + delta;
+    if (next < 0) next = 0;
+    if (next > available) next = available;
+
+    pm.deployedDefenseUnits[unitId] = next;
+    this.updateDefensePlayerUnitsUI();
+};
+
+game.executeDefense = async function () {
+    const pm = this.state.politicalMode;
+    const territoryId = pm.defenseTargetId;
+    const territory = this.state.territories.find(t => t.id === territoryId);
+    if (!territory || !territory.pendingAttack) return;
+
+    const playerPower = parseInt(document.getElementById('defensePlayerPower').textContent);
+    const enemyPower = parseInt(document.getElementById('defenseEnemyPower').textContent);
+
+    if (playerPower >= enemyPower) {
+        // ПОБЕДА ИГРОКА (Оборона)
+        const remainingPower = playerPower - enemyPower;
+
+        // Игрок сохранил территорию. Гарнизон рассчитывается из остатка (включая базу 150)
+        territory.army = Math.max(1, Math.floor((remainingPower - 150) / 5));
+
+        // Проверка наличия медика (в гарнизоне или в подкреплении)
+        const hasMedic = (territory.garrison && territory.garrison.medic > 0) || (pm.deployedDefenseUnits && pm.deployedDefenseUnits.medic > 0);
+
+        for (let uid in pm.deployedDefenseUnits) {
+            const count = pm.deployedDefenseUnits[uid];
+            if (uid === 'sniper') continue; // Снайперы не умирают при победе
+
+            let loss = count;
+            if (hasMedic) {
+                const refund = Math.ceil(count * 0.1);
+                loss = Math.max(0, count - refund);
+            }
+            pm.army[uid] -= loss;
+        }
+
+        await this.showAlert(`🛡️ ОТБИТО! Атака на ${territory.name} успешно отражена. Враг отступил с большими потерями.`, 'Победа в обороне');
+        if (this.playSound) this.playSound('correct');
+    } else {
+        // ПОРАЖЕНИЕ ИГРОКА (Оборона)
+        const reducedEnemyPower = enemyPower - playerPower;
+
+        const attackerName = territory.pendingAttack.attacker;
+        territory.owner = attackerName;
+        // Бот захватил. Его выжившие юниты становятся новым гарнизоном (учитывая, что он теперь защитник с базой 150)
+        territory.army = Math.max(1, Math.floor(reducedEnemyPower / 5));
+
+        for (let uid in pm.deployedDefenseUnits) {
+            pm.army[uid] -= pm.deployedDefenseUnits[uid];
+        }
+
+        await this.showAlert(`🏴 ПОТЕРЯНО! ${territory.name} пала под натиском врага. Наши войска вынуждены были отступить.`, 'Территория потеряна');
+        if (this.playSound) this.playSound('wrong');
+    }
+
+    // Очищаем статус атаки
+    delete territory.pendingAttack;
+    document.getElementById('defenseModal').style.display = 'none';
+    this.updateArmyUI();
+    this.refreshMapStyles();
+};
+
+// ===== NOTIFICATION SYSTEM (DIPLOMATIC MAIL) =====
+
+game.addNotification = function (notif) {
+    const pm = this.state.politicalMode;
+    if (!pm.notifications) pm.notifications = [];
+
+    // Генерируем уникальный ID
+    notif.id = 'notif_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+    pm.notifications.push(notif);
+
+    this.updateBellUI();
+};
+
+game.updateBellUI = function () {
+    const pm = this.state.politicalMode;
+    const badge = document.getElementById('bellBadge');
+    const container = document.getElementById('bellContainer');
+
+    const count = (pm.notifications || []).length;
+
+    if (count > 0) {
+        badge.style.display = 'block';
+        container.classList.add('bell-active');
+    } else {
+        badge.style.display = 'none';
+        container.classList.remove('bell-active');
+    }
+};
+
+game.openNotificationsModal = function () {
+    const pm = this.state.politicalMode;
+    const list = document.getElementById('notificationsList');
+    list.innerHTML = '';
+
+    if (!pm.notifications || pm.notifications.length === 0) {
+        list.innerHTML = '<div style="text-align: center; padding: 30px; color: #666; font-style: italic;">Почтовый ящик пуст...</div>';
+    } else {
+        pm.notifications.forEach(notif => {
+            const item = document.createElement('div');
+            item.className = 'notification-item';
+
+            if (notif.type === 'alliance_offer') {
+                const bot = pm.botCountries.find(b => b.name === notif.from);
+                const countryName = bot ? bot.empireName : notif.from;
+
+                item.innerHTML = `
+                    <div class="notif-header">
+                        <span>🤝 Предложение союза</span>
+                        <span style="color: #d4af37;">${countryName}</span>
+                    </div>
+                    <div class="notif-text">
+                        "${notif.text || 'Мы предлагаем нашим народам объединиться в крепкий союз во имя мира и процветания.'}"
+                    </div>
+                    <div class="notif-actions">
+                        <button class="notif-btn notif-btn-accept" onclick="game.respondToNotification('${notif.id}', true)">Принять</button>
+                        <button class="notif-btn notif-btn-decline" onclick="game.respondToNotification('${notif.id}', false)">Отклонить</button>
+                    </div>
+                `;
+            }
+            list.appendChild(item);
+        });
+    }
+
+    document.getElementById('notificationsModal').style.display = 'flex';
+};
+
+game.respondToNotification = function (notifId, accepted) {
+    const pm = this.state.politicalMode;
+    const index = pm.notifications.findIndex(n => n.id === notifId);
+    if (index === -1) return;
+
+    const notif = pm.notifications[index];
+
+    if (notif.type === 'alliance_offer' && accepted) {
+        this.setDiplomacyRelation(notif.from, 'player', 'ally');
+        const bot = pm.botCountries.find(b => b.name === notif.from);
+        this.addNews(`🤝 Заключен союз с ${bot ? bot.empireName : notif.from}!`, 'ally');
+    }
+
+    // Удаляем уведомление
+    pm.notifications.splice(index, 1);
+
+    // Обновляем UI
+    this.updateBellUI();
+    this.openNotificationsModal();
+    if (this.updateDiplomacyUI) this.updateDiplomacyUI();
+};
+
+// Экспортируем объект игры в глобальную область видимости для HTML-обработчиков
+window.game = game;
+
+
+
+
+
+
+
+game.getResourceName = function (res) {
+    const names = {
+        wood: 'Дерево',
+        coal: 'Уголь',
+        iron: 'Железо',
+        oil: 'Нефть',
+        gold: 'Золото',
+        food: 'Еда',
+        leather: 'Кожа',
+        manpower: 'Людские ресурсы'
+    };
+    return names[res] || res;
+};
+
+// ============================================
+// TRADE SYSTEM LOGIC
+// ============================================
+
+game.openTrade = function () {
+    const modal = document.getElementById('tradeModal');
+    modal.style.display = 'flex';
+    this.switchTradeTab('market');
+    this.updateTradeUI();
+
+    // Tab bindings
+    document.getElementById('tabTradeMarket').onclick = () => this.switchTradeTab('market');
+    document.getElementById('tabTradeRequest').onclick = () => this.switchTradeTab('request');
+};
+
+game.switchTradeTab = function (tab) {
+    const marketSec = document.getElementById('tradeMarketSection');
+    const requestSec = document.getElementById('tradeRequestSection');
+    const tabMarket = document.getElementById('tabTradeMarket');
+    const tabRequest = document.getElementById('tabTradeRequest');
+
+    if (tab === 'market') {
+        marketSec.style.display = 'block';
+        requestSec.style.display = 'none';
+        tabMarket.classList.add('active');
+        tabRequest.classList.remove('active');
+    } else {
+        marketSec.style.display = 'none';
+        requestSec.style.display = 'block';
+        tabMarket.classList.remove('active');
+        tabRequest.classList.add('active');
+        this.updateAllyTradeList();
+    }
+};
+
+game.generateTradeOrders = function () {
+    const resources = ['wood', 'iron', 'coal', 'oil', 'gold', 'food', 'leather'];
+    const pm = this.state.politicalMode;
+    pm.tradeOrders = [];
+
+    // Генерируем 6 случайных заказов на ПРОДАЖУ ресурсов игроком (Экономика: Ресурсы -> Казна)
+    for (let i = 0; i < 6; i++) {
+        const type = 'sell';
+        const res = resources[Math.floor(Math.random() * resources.length)];
+        const amount = (Math.floor(Math.random() * 5) + 1) * 20;
+
+        // Пониженная цена за продажу ресурсов (0.15 - 0.35 от объема)
+        let price = Math.floor(amount * (0.15 + Math.random() * 0.2));
+
+        // Шанс на выгодное предложение от союзника (чуть больше золота)
+        let hasDiscount = false;
+        if (pm.botCountries.some(b => this.getDiplomacyRelation('player', b.name) === 'ally')) {
+            if (Math.random() < 0.15) { // Шанс 15%
+                price = Math.floor(price * 1.3); // Союзник платит на 30% больше
+                hasDiscount = true;
+            }
+        }
+
+        pm.tradeOrders.push({
+            type,
+            resource: res,
+            amount,
+            price,
+            hasDiscount
+        });
+    }
+};
+
+game.updateTradeUI = function () {
+    const pm = this.state.politicalMode;
+    const list = document.getElementById('tradeOrdersList');
+    list.innerHTML = '';
+
+    if (!pm.tradeOrders || pm.tradeOrders.length === 0) {
+        this.generateTradeOrders();
+    }
+
+    pm.tradeOrders.forEach((order, index) => {
+        const div = document.createElement('div');
+        div.className = 'glass-card';
+        div.style.padding = '15px';
+        div.style.marginBottom = '10px';
+        div.style.display = 'flex';
+        div.style.justifyContent = 'space-between';
+        div.style.alignItems = 'center';
+        div.style.borderLeft = order.hasDiscount ? '4px solid #ffd700' : '4px solid #4CAF50';
+
+        const resName = this.getResourceName(order.resource);
+        const icon = this.getResourceIcon(order.resource);
+
+        let text = '';
+        if (order.type === 'buy') {
+            text = `Закупка: <strong>${order.amount}</strong> <i class="${icon}"></i> ${resName} за <span style="color: #ffd700;">${order.price} <i class="fas fa-coins"></i></span>`;
+        } else {
+            text = `Продажа: <strong>${order.amount}</strong> <i class="${icon}"></i> ${resName} за <span style="color: #ffd700;">${order.price} <i class="fas fa-coins"></i></span>`;
+        }
+
+        div.innerHTML = `
+            <div style="flex: 1;">
+                ${order.hasDiscount ? '<div style="font-size: 0.7rem; color: #ffd700; font-weight: bold;"><i class="fas fa-star"></i> ПРЕДЛОЖЕНИЕ СОЮЗНИКА (-20%)</div>' : ''}
+                <div style="font-size: 0.95rem;">${text}</div>
+            </div>
+            <button class="historical-btn" style="padding: 5px 15px; font-size: 0.8rem;" onclick="game.executeTrade(${index})">Сделка</button>
+        `;
+        list.appendChild(div);
+    });
+};
+
+game.executeTrade = async function (index) {
+    const pm = this.state.politicalMode;
+    const order = pm.tradeOrders[index];
+    if (!order) return;
+
+    if (order.type === 'buy') {
+        if (pm.resources.coins < order.price) {
+            this.showNotification('Недостаточно монет в казне!', 'error');
+            return;
+        }
+        pm.resources.coins -= order.price;
+        pm.resources[order.resource] = (pm.resources[order.resource] || 0) + order.amount;
+    } else {
+        if ((pm.resources[order.resource] || 0) < order.amount) {
+            this.showNotification(`Недостаточно ресурса: ${this.getResourceName(order.resource)}!`, 'error');
+            return;
+        }
+        pm.resources[order.resource] -= order.amount;
+        pm.resources.coins += order.price;
+    }
+
+    pm.tradeOrders.splice(index, 1);
+    this.updateResourceUI();
+    this.updateTradeUI();
+    if (this.playSound) this.playSound('correct');
+    this.addNews(`Торговля: ${order.type === 'buy' ? 'Закупка' : 'Продажа'} ${this.getResourceName(order.resource)}`, 'production');
+
+    this.showNotification(`Сделка успешно проведена: ${order.type === 'buy' ? 'закупка' : 'продажа'} ${this.getResourceName(order.resource)}`, 'success');
+};
+
+game.updateAllyTradeList = function () {
+    const pm = this.state.politicalMode;
+    const list = document.getElementById('tradeAllyList');
+    list.innerHTML = '';
+
+    const allies = pm.botCountries.filter(b => this.getDiplomacyRelation('player', b.name) === 'ally');
+
+    if (allies.length === 0) {
+        list.innerHTML = '<p style="text-align: center; color: #888; padding: 20px;">У вас нет союзников для прямых запросов.</p>';
+        document.getElementById('tradeRequestActions').style.display = 'none';
+        return;
+    }
+
+    allies.forEach(bot => {
+        const btn = document.createElement('button');
+        btn.className = 'historical-btn';
+        btn.style.width = '100%';
+        btn.style.textAlign = 'left';
+        btn.style.marginBottom = '8px';
+        btn.innerHTML = `🤝 ${bot.empireName}`;
+        btn.onclick = () => {
+            document.getElementById('tradeSelectedAllyName').textContent = bot.empireName;
+            document.getElementById('tradeRequestActions').style.display = 'block';
+            document.getElementById('tradeRequestActions').dataset.botName = bot.name;
+        };
+        list.appendChild(btn);
+    });
+};
+
+game.sendDirectRequest = function (resource) {
+    const botName = document.getElementById('tradeRequestActions').dataset.botName;
+    const bot = this.state.politicalMode.botCountries.find(b => b.name === botName);
+    if (!bot) return;
+
+    if (Math.random() < 0.40) {
+        const amount = Math.floor(Math.random() * 40) + 20;
+        this.state.politicalMode.resources[resource] = (this.state.politicalMode.resources[resource] || 0) + amount;
+        this.showAlert(`🤝 ${bot.empireName} одобрил запрос! Вам отправлено ${amount} ед. ресурса: ${this.getResourceName(resource)}.`, 'Успех');
+        this.updateResourceUI();
+        if (this.playSound) this.playSound('correct');
+        this.addNews(`${bot.empireName} выделил ресурсы: ${amount} ${this.getResourceName(resource)}`, 'ally');
+    } else {
+        this.showAlert(`${bot.empireName} отклонил запрос, сославшись на нехватку ресурсов.`, 'Отказ');
+        if (this.playSound) this.playSound('wrong');
+    }
+
+    document.getElementById('tradeModal').style.display = 'none';
+};
+
+// ============================================
+// CUSTOM UI SYSTEM (TOASTS & MODALS)
+// ============================================
+
+game.showNotification = function (message, type = 'info') {
+    const container = document.getElementById('toastContainer');
+    if (!container) return;
+
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+
+    const icons = {
+        success: 'fa-check-circle',
+        error: 'fa-exclamation-circle',
+        warning: 'fa-exclamation-triangle',
+        info: 'fa-info-circle'
+    };
+
+    toast.innerHTML = `
+        <div class="toast-icon"><i class="fas ${icons[type] || icons.info}"></i></div>
+        <div class="toast-content">${message}</div>
+        <div class="toast-progress">
+            <div class="toast-progress-bar" style="animation-duration: 4s;"></div>
+        </div>
+    `;
+
+    container.appendChild(toast);
+
+    // Удаление через 4 секунды
+    setTimeout(() => {
+        toast.style.animation = 'toastOut 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards';
+        setTimeout(() => toast.remove(), 500);
+    }, 4000);
+};
+
+// Заменяем стандартный alert
+game.showAlert = function (message, title = 'Внимание') {
+    return new Promise((resolve) => {
+        const overlay = document.getElementById('customUIOverlay');
+        const titleEl = document.getElementById('customUITitle');
+        const msgEl = document.getElementById('customUIMessage');
+        const confirmBtn = document.getElementById('customUIConfirmBtn');
+        const cancelBtn = document.getElementById('customUICancelBtn');
+        const iconContainer = document.getElementById('customUIIcon');
+
+        titleEl.textContent = title;
+        msgEl.innerHTML = message;
+        cancelBtn.style.display = 'none';
+        iconContainer.innerHTML = '<i class="fas fa-info-circle"></i>';
+
+        overlay.style.display = 'flex';
+
+        confirmBtn.onclick = () => {
+            overlay.style.display = 'none';
+            resolve(true);
+        };
+    });
+};
+
+// Заменяем стандартный confirm
+game.showConfirm = function (message, title = 'Подтверждение') {
+    return new Promise((resolve) => {
+        const overlay = document.getElementById('customUIOverlay');
+        const titleEl = document.getElementById('customUITitle');
+        const msgEl = document.getElementById('customUIMessage');
+        const confirmBtn = document.getElementById('customUIConfirmBtn');
+        const cancelBtn = document.getElementById('customUICancelBtn');
+        const iconContainer = document.getElementById('customUIIcon');
+
+        titleEl.textContent = title;
+        msgEl.innerHTML = message;
+        cancelBtn.style.display = 'block';
+        iconContainer.innerHTML = '<i class="fas fa-question-circle"></i>';
+
+        overlay.style.display = 'flex';
+
+        confirmBtn.onclick = () => {
+            overlay.style.display = 'none';
+            resolve(true);
+        };
+
+        cancelBtn.onclick = () => {
+            overlay.style.display = 'none';
+            resolve(false);
+        };
+    });
+};
+
+// Глобальное переопределение alert/confirm (опционально, но лучше использовать явные методы)
+// window.alert = (msg) => game.showAlert(msg);
+// window.confirm = (msg) => game.showConfirm(msg);
+
+window.game = game;

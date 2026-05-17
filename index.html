@@ -4,7 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Исторический Захват Территории</title>
+    <script src="protection.js"></script>
+    <title>2history - Глобальная стратегия</title>
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -19,7 +20,8 @@
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-    <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+    <script src="https://unpkg.com/@turf/turf@7/turf.min.js"></script>
+
 </head>
 
 <body>
@@ -31,15 +33,15 @@
             <i class="fas fa-chess-rook"></i>
         </div>
         <div class="nav-controls">
-            <button id="languageToggle" class="nav-btn">
+            <button id="languageToggle" class="nav-btn" style="display: none;">
                 <i class="fas fa-globe"></i>
                 <span id="lang-text">EN</span>
             </button>
-            <button id="themeToggle" class="nav-btn">
+            <button id="themeToggle" class="nav-btn" style="display: none;">
                 <i class="fas fa-moon"></i>
                 <span id="theme-text">Тема</span>
             </button>
-            <button id="soundToggle" class="nav-btn">
+            <button id="soundToggle" class="nav-btn" style="display: none;">
                 <i class="fas fa-volume-up"></i>
             </button>
             <div id="authContainer" class="auth-nav">
@@ -48,9 +50,20 @@
                     <span id="login-text">Вход</span>
                 </button>
                 <div id="userInfo" class="user-info-brief" style="display: none;">
-                    <span id="userDisplayName" class="user-name"></span>
-                    <button id="logoutBtn" class="nav-btn small-btn" title="Выйти">
+                    <div class="user-main-info">
+                        <span id="userDisplayName" class="user-name" title="Открыть профиль" style="cursor: pointer;"></span>
+                        <div class="user-stats-nav">
+                            <span title="Очки"><i class="fas fa-trophy"></i> <span id="navScore">0</span></span>
+                            <span title="Захвачено территорий"><i class="fas fa-flag"></i> <span id="navTerritories">0</span></span>
+                        </div>
+                    </div>
+                    <button id="profileBtn" class="nav-btn" title="Мой профиль">
+                        <i class="fas fa-user-circle"></i>
+                        <span>Профиль</span>
+                    </button>
+                    <button id="logoutBtn" class="nav-btn logout-btn" title="Выйти">
                         <i class="fas fa-sign-out-alt"></i>
+                        <span>Выход</span>
                     </button>
                 </div>
             </div>
@@ -130,6 +143,40 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Global Leaderboard Section -->
+                <div class="glow-divider"></div>
+                <div class="global-leaderboard-section">
+                    <h2 class="lb-main-title"><i class="fas fa-crown"></i> Таблица лидеров</h2>
+                    <p class="lb-main-subtitle">Лучшие игроки во всех режимах</p>
+
+                    <div class="lb-mode-tabs">
+                        <button class="lb-mode-tab active" data-mode="single">
+                            <i class="fas fa-user"></i> Одиночная
+                        </button>
+                        <button class="lb-mode-tab" data-mode="political">
+                            <i class="fas fa-globe-americas"></i> Политическая
+                        </button>
+                        <button class="lb-mode-tab" data-mode="online">
+                            <i class="fas fa-users"></i> Онлайн
+                        </button>
+                    </div>
+
+                    <div class="lb-table-wrapper">
+                        <div class="lb-table-header">
+                            <span class="lb-col-rank">#</span>
+                            <span class="lb-col-name">Игрок</span>
+                            <span class="lb-col-score"><i class="fas fa-star"></i> Очки</span>
+                            <span class="lb-col-terr"><i class="fas fa-flag"></i> Территории</span>
+                            <span class="lb-col-acc"><i class="fas fa-bullseye"></i> Точность</span>
+                        </div>
+                        <div id="globalLeaderboardList" class="lb-rows-container">
+                            <div class="lb-loading">
+                                <i class="fas fa-spinner fa-spin"></i> Загрузка...
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -143,7 +190,7 @@
             </div>
 
             <div class="settings-container">
-                <div class="setting-group">
+                <div class="setting-group sp-only">
                     <h3><i class="fas fa-scroll"></i> Тип истории</h3>
                     <div class="continents-grid">
                         <div class="continent-card type-card selected" data-type="world">
@@ -168,12 +215,25 @@
                         <button class="period-btn" data-period="renaissance">Ренессанс</button>
                         <button class="period-btn" data-period="19th_century">XIX век</button>
                         <button class="period-btn" data-period="20th_century">XX век</button>
+                        <button class="period-btn" data-period="wwii">1939-1945</button>
                         <button class="period-btn" data-period="modern">Новейшее время</button>
                         <button class="period-btn active" data-period="any">Любые</button>
                     </div>
                 </div>
 
-                <div class="setting-group">
+                <div class="setting-group pol-only" style="display: none;">
+                    <h3><i class="fas fa-flag"></i> Выбор страны</h3>
+                    <div class="country-carousel">
+                        <button id="carouselPrev" class="carousel-btn"><i class="fas fa-chevron-left"></i></button>
+                        <div class="carousel-content">
+                            <div id="carouselFlag" class="carousel-flag">🏳️</div>
+                            <div id="carouselName" class="carousel-name">Выберите страну</div>
+                        </div>
+                        <button id="carouselNext" class="carousel-btn"><i class="fas fa-chevron-right"></i></button>
+                    </div>
+                </div>
+
+                <div class="setting-group sp-only">
                     <h3><i class="fas fa-sliders-h"></i> Сложность</h3>
                     <div class="difficulty-selector">
                         <button class="diff-btn" data-diff="1">Легко</button>
@@ -182,7 +242,7 @@
                     </div>
                 </div>
 
-                <div class="setting-group">
+                <div class="setting-group sp-only">
                     <h3><i class="fas fa-chess-board"></i> Размер карты</h3>
                     <div class="map-size-selector">
                         <button class="size-btn" data-size="small">Маленькая (21 территория)</button>
@@ -197,27 +257,6 @@
             </div>
         </div>
 
-        <!-- Экран выбора страны (Political Game) -->
-        <div id="countrySelectionScreen" class="screen">
-            <div class="screen-header">
-                <button class="back-btn" onclick="game.showScreen('settingsScreen')">
-                    <i class="fas fa-arrow-left"></i> Назад
-                </button>
-                <h2>Выберите вашу страну</h2>
-            </div>
-
-            <div class="settings-container">
-                <div class="setting-group">
-                    <h3><i class="fas fa-flag"></i> Доступные державы</h3>
-                    <p>Выберите страну, за которую хотите играть. Остальные страны будут управляться ИИ.</p>
-
-                    <div class="countries-grid">
-                        <!-- Заполняется динамически -->
-                    </div>
-                </div>
-            </div>
-        </div>
-        </div>
 
         <!-- Экран игры -->
         <div id="gameScreen" class="screen">
@@ -231,6 +270,10 @@
                         <span class="info-label">Сложность:</span>
                         <span id="currentDifficulty" class="info-value">Средняя</span>
                     </div>
+                    <div class="info-item pol-only" style="display: none; border-top: 1px solid rgba(212,175,55,0.2); padding-top: 5px; margin-top: 5px;">
+                        <span class="info-label">Действия:</span>
+                        <span id="actionsLeftCount" class="info-value" style="color: #ffeb3b; font-weight: bold;">4 / 4</span>
+                    </div>
                 </div>
 
                 <div class="game-stats">
@@ -238,19 +281,28 @@
                         <i class="fas fa-flag"></i>
                         <span id="capturedCount">0</span>/<span id="totalTerritories">20</span>
                     </div>
-                    <div class="stat-item">
-                        <i class="fas fa-clock"></i>
-                        <span id="timer">30</span>с
+                    <div id="bellContainer" class="stat-item" style="position: relative; cursor: pointer;" onclick="game.openNotificationsModal()">
+                        <i class="fas fa-bell" id="bellIcon"></i>
+                        <span id="bellBadge" style="display: none; position: absolute; top: -5px; right: -5px; width: 10px; height: 10px; background: #ff4757; border-radius: 50%; box-shadow: 0 0 10px #ff4757;"></span>
                     </div>
+
                     <div class="stat-item">
                         <i class="fas fa-star"></i>
                         <span id="score">0</span>
                     </div>
                 </div>
 
-                <button id="pauseGame" class="nav-btn">
-                    <i class="fas fa-pause"></i>
-                </button>
+                <div style="display: flex; align-items: center; gap: 15px; width: 100%; margin-top: 5px;">
+                    <button id="pauseGame" class="nav-btn">
+                        <i class="fas fa-pause"></i>
+                    </button>
+
+                    <div class="production-btns" id="productionBtns" style="display: none;">
+                        <button id="btnViewPolitical" class="map-btn" title="Политическая карта"><i class="fas fa-map"></i></button>
+                        <button id="btnViewProduction" class="map-btn" title="Режим производства"><i class="fas fa-gem"></i></button>
+                        <button id="btnViewBattle" class="map-btn" title="Режим битвы"><i class="fas fa-fist-raised"></i></button>
+                    </div>
+                </div>
             </div>
 
             <div class="game-content">
@@ -267,26 +319,75 @@
                     <div id="territoryMap" class="territory-map">
                         <!-- Карта будет генерироваться в JS -->
                     </div>
+
+                    <!-- End Turn Button -->
+                    <button id="endTurnBtn" title="Завершить ход" style="
+                        display:none; position:absolute; bottom:20px; left:20px; z-index:1000;
+                        width:60px; height:60px; border-radius:50%;
+                        background: linear-gradient(145deg,#4a2000,#8b4513);
+                        border: 3px solid #d4af37; color:#d4af37;
+                        font-size:26px; cursor:pointer; box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+                        transition: transform 0.2s, box-shadow 0.2s;
+                    " onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'">
+                        ⏳
+                    </button>
+
+                    <!-- News Feed -->
+                    <div id="newsFeed" style="
+                        display:none; position:absolute; bottom:20px; left:90px; z-index:1000;
+                        width:320px; max-height:150px; overflow-y:auto;
+                        background: rgba(10,10,20,0.85); backdrop-filter:blur(8px);
+                        border: 1px solid rgba(212,175,55,0.3); border-radius:10px;
+                        padding:10px 14px; font-size:0.8rem; color:#ccc;
+                    ">
+                        <div style="color:#d4af37; font-weight:bold; margin-bottom:6px; font-size:0.85rem;">📰 Новости</div>
+                        <div id="newsItems"></div>
+                    </div>
+
                 </div>
 
                 <!-- Правая колонка: Панель ресурсов и Вопросы -->
                 <div class="side-dashboard">
                     <!-- Resource Panel (Political Mode) -->
                     <div id="resourcePanel" class="political-dashboard" style="display: none;">
-                        <h3 class="dashboard-header">
-                            <i class="fas fa-coins"></i> Экономика
+                        <h3 class="dashboard-header" style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="game.toggleResourcePanel()">
+                            <span><i class="fas fa-coins"></i> Экономика</span>
+                            <i id="resourcePanelToggleIcon" class="fas fa-chevron-up"></i>
                         </h3>
+                        
+                        <div id="resourcePanelContent">
+                            <div class="eco-item treasury-item">
+                                <span class="res-label" style="color: #ffd700;"><i class="fas fa-coins"></i> Казна:</span>
+                                <span id="treasuryCount" class="res-value" style="color: #ffd700;">0</span>
+                            </div>
                         <div class="eco-item">
-                            <span class="res-label" style="color: #ffd700;"><i class="fas fa-star"></i> Звезды:</span>
-                            <span id="starsCount" class="res-value" style="color: #ffd700;">0</span>
+                            <span class="res-label" style="color: #ff6b6b;"><i class="fas fa-coins"></i> Расход:</span>
+                            <span id="maintenanceCost" class="res-value" style="color: #ff6b6b;">0</span>
                         </div>
                         <div class="eco-item">
-                            <span class="res-label" style="color: #ff6b6b;"><i class="fas fa-exclamation-triangle"></i>
-                                Расход/мин:</span>
-                            <span id="maintenanceCost" class="res-value" style="color: #ff6b6b;">0</span>
+                            <span class="res-label" style="color: #4CAF50;"><i class="fas fa-fist-raised"></i> Армия (чел/тех):</span>
+                            <span id="manpowerCount" class="res-value" style="color: #4CAF50;">0</span>
+                        </div>
+
+
+                        <div class="dashboard-actions">
+                            <button id="openActionsBtn" class="historical-btn btn-action-purple">
+                                <i class="fas fa-scroll"></i> Штаб
+                            </button>
+                            <button id="openDiplomacyBtn" class="historical-btn btn-action-blue">
+                                <i class="fas fa-envelope"></i> Дипломатия
+                            </button>
                         </div>
 
                         <h4 class="resource-section-title">Ресурсы</h4>
+                        <div class="resource-item">
+                            <span class="res-label"><i class="fas fa-wheat-awn" style="color: #f39c12;"></i> Еда:</span>
+                            <span id="foodCount" class="res-value">0</span>
+                        </div>
+                        <div class="resource-item">
+                            <span class="res-label"><i class="fas fa-drum" style="color: #d35400;"></i> Кожа:</span>
+                            <span id="leatherCount" class="res-value">0</span>
+                        </div>
                         <div class="resource-item">
                             <span class="res-label"><i class="fas fa-tree" style="color: #8b4513;"></i> Дерево:</span>
                             <span id="woodCount" class="res-value">0</span>
@@ -307,10 +408,12 @@
                             <span class="res-label"><i class="fas fa-gem" style="color: #ffd700;"></i> Золото:</span>
                             <span id="goldCount" class="res-value">0</span>
                         </div>
+                        </div>
                     </div>
 
+
                     <!-- Вопрос -->
-                    <div class="question-container">
+                    <div class="question-container" id="questionContainer">
                         <div class="question-header">
                             <h3>Вопрос №<span id="questionNumber">1</span></h3>
                             <div class="question-meta">
@@ -353,32 +456,139 @@
                 </div>
             </div>
 
-            <!-- Trade Popup (Moved out of grid) -->
-            <div id="tradePopup" class="political-popup" style="display: none;">
-                <h2><i class="fas fa-handshake"></i> Торговое предложение</h2>
-                <p id="tradeOfferText" style="font-size: 1.1rem; margin: 1.5rem 0; line-height: 1.6;"></p>
-                <div style="display: flex; gap: 15px; margin-top: 25px;">
-                    <button id="acceptTradeBtn" class="historical-btn" style="flex: 1;"><i class="fas fa-check"></i>
-                        Принять</button>
-                    <button id="declineTradeBtn" class="historical-btn btn-secondary" style="flex: 1;"><i
-                            class="fas fa-times"></i> Отказаться</button>
+
+
+            <!-- Bottom Production Selection Toolbar -->
+            <div id="productionBar" class="production-toolbar" style="display: none;">
+                <div class="toolbar-label">
+                    <i class="fas fa-hammer"></i> ВЫБОР ПРОИЗВОДСТВА
+                </div>
+                
+                <div class="toolbar-options">
+                    <button class="toolbar-btn" onclick="game.batchSetProduction('food')" title="Еда" style="--res-color: #f5f5dc;"><i class="fas fa-wheat-awn"></i><span>Еда</span></button>
+                    <button class="toolbar-btn" onclick="game.batchSetProduction('leather')" title="Кожа" style="--res-color: #d2b48c;"><i class="fas fa-drum"></i><span>Кожа</span></button>
+                    <button class="toolbar-btn" onclick="game.batchSetProduction('wood')" title="Дерево" style="--res-color: #5d4037;"><i class="fas fa-tree"></i><span>Дерево</span></button>
+                    <button class="toolbar-btn" onclick="game.batchSetProduction('coal')" title="Уголь" style="--res-color: #424242;"><i class="fas fa-fire"></i><span>Уголь</span></button>
+                    <button class="toolbar-btn" onclick="game.batchSetProduction('iron')" title="Железо" style="--res-color: #c0c0c0;"><i class="fas fa-hammer"></i><span>Железо</span></button>
+                    <button class="toolbar-btn" onclick="game.batchSetProduction('oil')" title="Нефть" style="--res-color: #000;"><i class="fas fa-oil-can"></i><span>Нефть</span></button>
+                    <button class="toolbar-btn" onclick="game.batchSetProduction('gold')" title="Золото" style="--res-color: #ffd700;"><i class="fas fa-gem"></i><span>Золото</span></button>
+                </div>
+                
+                <div class="toolbar-actions">
+                    <button class="historical-btn btn-secondary" onclick="game.clearProductionSelection()">
+                        <i class="fas fa-times"></i> Отмена
+                    </button>
                 </div>
             </div>
 
-            <!-- Revolt Warning (Moved out of grid) -->
-            <div id="revoltWarning" class="political-popup revolt-warning" style="display: none;">
-                <h2><i class="fas fa-skull-crossbones"></i> ОПАСНОСТЬ: Бунт!</h2>
-                <p style="font-size: 1.1rem; margin: 1.5rem 0; line-height: 1.6;">У вас недостаточно звезд для
-                    содержания территорий! Если не исправить ситуацию, вспыхнет восстание!</p>
-                <div
-                    style="font-size: 2.2rem; font-weight: bold; color: #ff6b6b; text-align: center; margin: 1.5rem 0; text-shadow: 0 0 20px rgba(255, 107, 107, 0.4);">
-                    <i class="fas fa-hourglass-half"></i> <span id="revoltTimer">90</span> сек
+            <!-- Actions Modal -->
+            <div id="actionsModal" class="political-popup" style="display: none;">
+                <h2><i class="fas fa-scroll"></i> Управление государством</h2>
+                
+                <div class="actions-grid">
+                    <button id="btnArmy" class="historical-btn btn-large btn-army">
+                        <i class="fas fa-fist-raised"></i> Армия
+                    </button>
+                    <button id="btnBarracks" class="historical-btn btn-large btn-barracks">
+                        <i class="fas fa-campground"></i> Казарма
+                    </button>
+                    <button id="btnEconomy" class="historical-btn btn-large btn-economy">
+                        <i class="fas fa-chart-line"></i> Экономика
+                    </button>
+                    <button id="btnTrade" class="historical-btn btn-large btn-trade">
+                        <i class="fas fa-handshake"></i> Торговля
+                    </button>
                 </div>
-                <button id="closeRevoltWarning" class="historical-btn" style="margin: 0 auto; width: fit-content;"
-                    onclick="document.getElementById('revoltWarning').style.display='none'">
-                    <i class="fas fa-times"></i> Понятно
-                </button>
+
+
+
+                <div style="display: flex; gap: 10px; margin-top: 30px;">
+                    <button id="closeActionsBtn" class="historical-btn btn-secondary" style="flex: 1; height: 55px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);" onclick="document.getElementById('actionsModal').style.display='none'">
+                        Закрыть меню
+                    </button>
+                </div>
             </div>
+
+            <!-- Army Modal -->
+            <div id="armyModal" class="political-popup" style="display: none; width: 800px; max-width: 95vw; height: 600px; max-height: 90vh; overflow: hidden; flex-direction: column;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h2 style="margin: 0;"><i class="fas fa-fist-raised"></i> Военный штаб</h2>
+                    <button class="nav-btn" onclick="document.getElementById('armyModal').style.display='none'"><i class="fas fa-times"></i></button>
+                </div>
+
+                <div class="army-tabs" style="display: flex; gap: 10px; margin-bottom: 20px;">
+                    <button id="tabArmyComp" class="historical-btn active" style="flex: 1;" onclick="game.switchArmyTab('comp')">Состав Армии</button>
+                    <button id="tabBarracks" class="historical-btn" style="flex: 1;" onclick="game.switchArmyTab('barracks')">Казарма</button>
+                    <button id="tabModernization" class="historical-btn" style="flex: 1;" onclick="game.switchArmyTab('modernization')">Модернизация</button>
+                </div>
+
+                <div id="armyCompSection" class="army-section" style="flex: 1; overflow-y: auto;">
+                    <div id="armyList" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px;">
+                        <!-- Army units will be listed here -->
+                    </div>
+                    <h3 style="margin-top: 30px; border-top: 1px solid var(--glass-border); padding-top: 15px;">В производстве</h3>
+                    <div id="productionQueueList" style="display: flex; flex-direction: column; gap: 10px;">
+                        <!-- Production queue will be listed here -->
+                    </div>
+                </div>
+
+                <div id="barracksSection" class="army-section" style="display: none; flex: 1; overflow-y: auto;">
+                    <div id="availableUnitsList" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 15px;">
+                        <!-- Units for hire will be listed here -->
+                    </div>
+                </div>
+
+                <div id="modernizationSection" class="army-section" style="display: none; flex: 1; overflow-y: auto;">
+                    <p style="color: #aaa; margin-bottom: 15px; font-size: 0.9rem;"><i class="fas fa-info-circle"></i> Покупайте чертежи новых юнитов за монеты, чтобы они стали доступны в Казарме.</p>
+                    <div id="modernizationUnitsList" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 15px;">
+                        <!-- Modernization units will be listed here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Economy Modal -->
+            <div id="economyModal" class="political-popup" style="display: none; width: 800px; max-width: 95vw; height: 600px; max-height: 90vh; overflow: hidden; flex-direction: column;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h2 style="margin: 0;"><i class="fas fa-chart-line"></i> Экономическое развитие</h2>
+                    <button class="nav-btn" onclick="document.getElementById('economyModal').style.display='none'"><i class="fas fa-times"></i></button>
+                </div>
+                
+                <p style="color: #aaa; margin-bottom: 20px;">Улучшайте технологии добычи ресурсов. Каждое улучшение повышает эффективность добычи конкретного ресурса во всех ваших провинциях.</p>
+
+                <div id="economyResourceList" style="flex: 1; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 15px; padding-right: 10px;">
+                    <!-- Resource upgrade items will be listed here -->
+                </div>
+            </div>
+
+            <!-- Navy Modal -->
+            <div id="navyModal" class="political-popup" style="display: none; width: 800px; max-width: 95vw; height: 600px; max-height: 90vh; overflow: hidden; flex-direction: column;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h2 style="margin: 0;"><i class="fas fa-anchor"></i> Военно-морская база</h2>
+                    <button class="nav-btn" onclick="document.getElementById('navyModal').style.display='none'"><i class="fas fa-times"></i></button>
+                </div>
+
+                <div class="army-tabs" style="display: flex; gap: 10px; margin-bottom: 20px;">
+                    <button id="tabNavyComp" class="historical-btn active" style="flex: 1;" onclick="game.switchNavyTab('comp')">Состав Флота</button>
+                    <button id="tabNavyBuild" class="historical-btn" style="flex: 1;" onclick="game.switchNavyTab('build')">Верфь</button>
+                </div>
+
+                <div id="navyCompSection" class="army-section" style="flex: 1; overflow-y: auto;">
+                    <div id="navyList" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px;">
+                        <!-- Navy units will be listed here -->
+                    </div>
+                    <h3 style="margin-top: 30px; border-top: 1px solid var(--glass-border); padding-top: 15px;">В производстве</h3>
+                    <div id="navyQueueList" style="display: flex; flex-direction: column; gap: 10px;">
+                        <!-- Navy production queue will be listed here -->
+                    </div>
+                </div>
+
+                <div id="navyBuildSection" class="army-section" style="display: none; flex: 1; overflow-y: auto;">
+                    <div id="availableNavyList" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px;">
+                        <!-- Ships for build will be listed here -->
+                    </div>
+                </div>
+            </div>
+
         </div>
 
         <!-- Экран результатов -->
@@ -647,6 +857,121 @@
             </div>
         </div>
 
+        <!-- Модальное окно Профиля -->
+        <div id="profileModal" class="overlay" style="display: none;">
+            <div class="profile-container glass-card">
+                <button class="close-modal" onclick="document.getElementById('profileModal').style.display='none'">
+                    <i class="fas fa-times"></i>
+                </button>
+
+                <div class="profile-header">
+                    <div class="profile-avatar">
+                        <i class="fas fa-user-circle"></i>
+                    </div>
+                    <div class="profile-header-info">
+                        <h2 id="profileName">Игрок</h2>
+                        <span id="profileClass" class="profile-class-badge"></span>
+                        <span id="profileEmail" class="profile-email"></span>
+                    </div>
+                </div>
+
+                <div class="profile-overall-stats">
+                    <div class="profile-stat-item">
+                        <i class="fas fa-gamepad"></i>
+                        <span id="profileTotalGames">0</span>
+                        <label>Всего игр</label>
+                    </div>
+                    <div class="profile-stat-item">
+                        <i class="fas fa-star"></i>
+                        <span id="profileTotalScore">0</span>
+                        <label>Всего очков</label>
+                    </div>
+                    <div class="profile-stat-item">
+                        <i class="fas fa-bullseye"></i>
+                        <span id="profileAccuracy">0%</span>
+                        <label>Точность</label>
+                    </div>
+                    <div class="profile-stat-item">
+                        <i class="fas fa-flag"></i>
+                        <span id="profileTotalTerr">0</span>
+                        <label>Территорий</label>
+                    </div>
+                </div>
+
+                <h3 class="profile-section-title"><i class="fas fa-chart-bar"></i> Статистика по режимам</h3>
+
+                <div class="profile-mode-cards">
+                    <div class="profile-mode-card">
+                        <div class="pmc-header">
+                            <i class="fas fa-user"></i>
+                            <h4>Одиночная</h4>
+                        </div>
+                        <div class="pmc-stats">
+                            <div class="pmc-stat">
+                                <span id="pSingleGames">0</span>
+                                <label>Игр</label>
+                            </div>
+                            <div class="pmc-stat">
+                                <span id="pSingleScore">0</span>
+                                <label>Очков</label>
+                            </div>
+                            <div class="pmc-stat">
+                                <span id="pSingleTerr">0</span>
+                                <label>Территорий</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="profile-mode-card">
+                        <div class="pmc-header">
+                            <i class="fas fa-globe-americas"></i>
+                            <h4>Политическая</h4>
+                        </div>
+                        <div class="pmc-stats">
+                            <div class="pmc-stat">
+                                <span id="pPolitGames">0</span>
+                                <label>Игр</label>
+                            </div>
+                            <div class="pmc-stat">
+                                <span id="pPolitScore">0</span>
+                                <label>Очков</label>
+                            </div>
+                            <div class="pmc-stat">
+                                <span id="pPolitTerr">0</span>
+                                <label>Территорий</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="profile-mode-card">
+                        <div class="pmc-header">
+                            <i class="fas fa-users"></i>
+                            <h4>Онлайн</h4>
+                        </div>
+                        <div class="pmc-stats">
+                            <div class="pmc-stat">
+                                <span id="pOnlineGames">0</span>
+                                <label>Игр</label>
+                            </div>
+                            <div class="pmc-stat">
+                                <span id="pOnlineScore">0</span>
+                                <label>Очков</label>
+                            </div>
+                            <div class="pmc-stat">
+                                <span id="pOnlineTerr">0</span>
+                                <label>Территорий</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="profile-recent-title"><i class="fas fa-history"></i> Последние игры</div>
+                <div id="profileRecentGames" class="profile-recent-list">
+                    <p class="empty-state">Нет данных об играх</p>
+                </div>
+            </div>
+        </div>
+
         <!-- Модальное окно Аутентификации -->
         <div id="authModal" class="overlay" style="display: none;">
             <div class="auth-container glass-card">
@@ -693,6 +1018,158 @@
             </div>
         </div>
 
+        <!-- Модальное окно подтверждения Выхода -->
+        <div id="logoutConfirmModal" class="overlay" style="display: none;">
+            <div class="confirm-container glass-card">
+                <div class="confirm-icon">
+                    <i class="fas fa-sign-out-alt"></i>
+                </div>
+                <h2>Выход из системы</h2>
+                <p>Вы уверены, что хотите выйти из своего аккаунта? Весь ваш несохраненный прогресс текущей игры может быть потерян.</p>
+                
+                <div class="confirm-actions">
+                    <button id="confirmLogoutBtn" class="historical-btn">
+                        <i class="fas fa-check"></i> Да, выйти
+                    </button>
+                    <button id="cancelLogoutBtn" class="historical-btn btn-secondary">
+                        <i class="fas fa-times"></i> Остаться
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Модальное окно подтверждения Завершения Хода -->
+        <div id="endTurnConfirmModal" class="overlay" style="display: none;">
+            <div class="confirm-container glass-card turn-confirm-card">
+                <div class="confirm-header">
+                    <i class="fas fa-hourglass-half"></i>
+                    <h2>Завершение этапа</h2>
+                </div>
+                
+                <div class="turn-summary-content">
+                    <div class="current-date-info">
+                        <p>Текущая дата:</p>
+                        <h3 id="confirmCurrentDate">01.01.1939</h3>
+                    </div>
+                    
+                    <div class="production-estimate">
+                        <h4><i class="fas fa-chart-line"></i> Ожидаемая добыча:</h4>
+                        <div id="confirmProductionList" class="confirm-prod-grid">
+                            <!-- Заполняется динамически -->
+                        </div>
+                    </div>
+                    
+                    <p class="warning-text">Внимание: Боты примут свои решения, могут начаться новые конфликты.</p>
+                </div>
+                
+                <div class="confirm-actions">
+                    <button id="executeEndTurnBtn" class="historical-btn btn-confirm">
+                        <i class="fas fa-check"></i> Подтвердить переход
+                    </button>
+                    <button id="closeEndTurnModal" class="historical-btn btn-secondary">
+                        <i class="fas fa-times"></i> Отмена
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Модальное окно БИТВЫ -->
+        <div id="battleModal" class="overlay" style="display: none;">
+            <div class="confirm-container glass-card battle-container">
+                <div class="battle-header">
+                    <i class="fas fa-fist-raised"></i>
+                    <h2>Сражение за территорию</h2>
+                    <button class="close-modal" onclick="document.getElementById('battleModal').style.display='none'">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                
+                <div class="battle-content">
+                    <!-- Информация о враге -->
+                    <div class="battle-side enemy-side">
+                        <h3><i class="fas fa-shield-alt"></i> Оборона: <span id="battleEnemyCountry">-</span></h3>
+                        <div class="power-display">
+                            <div class="power-label">Общая сила:</div>
+                            <div id="battleEnemyPower" class="power-value">0</div>
+                        </div>
+                        <div id="battleEnemyUnits" class="battle-units-list">
+                            <!-- Список вражеских сил -->
+                        </div>
+                    </div>
+                    
+                    <div class="battle-vs"><i class="fas fa-bolt"></i></div>
+                    
+                    <!-- Ваша атака -->
+                    <div class="battle-side player-side">
+                        <h3><i class="fas fa-sword"></i> Атака: Вы</h3>
+                        <div class="power-display">
+                            <div class="power-label">Выделенная сила:</div>
+                            <div id="battlePlayerPower" class="power-value">0</div>
+                        </div>
+                        <div id="battlePlayerUnits" class="battle-units-selection">
+                            <!-- Ваши юниты для выбора -->
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="battle-footer">
+                    <div id="battlePrediction" class="battle-prediction">Выберите войска для атаки</div>
+                    <button id="startBattleBtn" class="historical-btn btn-xlarge" style="margin: 1rem 0; width: 100%;" disabled>
+                        <i class="fas fa-fist-raised"></i> В АТАКУ!
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Модальное окно ОБОРОНЫ -->
+        <div id="defenseModal" class="overlay" style="display: none;">
+            <div class="confirm-container glass-card battle-container defense-container">
+                <div class="battle-header" style="background: linear-gradient(135deg, #16213e, #1a1a2e); border-bottom-color: rgba(66, 165, 245, 0.4);">
+                    <i class="fas fa-shield-alt" style="color: #42a5f5;"></i>
+                    <h2>Оборона территории</h2>
+                    <button class="close-modal" onclick="document.getElementById('defenseModal').style.display='none'">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                
+                <div class="battle-content">
+                    <!-- Информация об атакующем (Враг) -->
+                    <div class="battle-side enemy-side">
+                        <h3><i class="fas fa-sword"></i> Агрессор: <span id="defenseEnemyCountry">-</span></h3>
+                        <div class="power-display">
+                            <div class="power-label">Сила атаки:</div>
+                            <div id="defenseEnemyPower" class="power-value">0</div>
+                        </div>
+                        <div id="defenseEnemyUnits" class="battle-units-list">
+                            <!-- Список атакующих сил -->
+                        </div>
+                    </div>
+                    
+                    <div class="battle-vs"><i class="fas fa-shield-virus"></i></div>
+                    
+                    <!-- Ваша оборона -->
+                    <div class="battle-side player-side">
+                        <h3><i class="fas fa-fort-awesome"></i> Оборона: Вы</h3>
+                        <div class="power-display">
+                            <div class="power-label">Ваша мощь:</div>
+                            <div id="defensePlayerPower" class="power-value">0</div>
+                        </div>
+                        <div id="defensePlayerUnits" class="battle-units-selection">
+                            <!-- Ваши юниты для выбора -->
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="battle-footer">
+                    <div id="defensePrediction" class="battle-prediction">Выберите войска для защиты</div>
+                    <button id="startDefenseBtn" class="historical-btn btn-xlarge" style="margin: 1rem 0; width: 100%; background: linear-gradient(135deg, #1565c0, #0d47a1); border-color: #42a5f5;">
+                        <i class="fas fa-shield-alt"></i> ЗАЩИТИТЬ!
+                    </button>
+                </div>
+            </div>
+        </div>
+
+
     </main>
 
     <!-- Футер -->
@@ -715,7 +1192,191 @@
     </footer>
 
     <script src="assets/js/background.js"></script>
+    <script src="js/ports.js"></script>
     <script src="script.js"></script>
+    <script src="endTurn.js"></script>
+
+    <!-- Diplomacy Modal (Redesigned) -->
+    <div id="diplomacyModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:99999; align-items:center; justify-content:center; backdrop-filter: blur(5px);">
+        <div class="glass-card" style="width: 850px; max-height: 85vh; border: 1px solid rgba(212,175,55,0.4); border-radius: 20px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 0 50px rgba(0,0,0,0.5);">
+            <!-- Header -->
+            <div style="padding: 20px 30px; background: linear-gradient(90deg, #1a1a2e, #16213e); border-bottom: 1px solid rgba(212,175,55,0.2); display: flex; justify-content: space-between; align-items: center;">
+                <h2 style="margin: 0; color: #d4af37; font-size: 1.6rem; letter-spacing: 1px;">
+                    <i class="fas fa-landmark"></i> ДИПЛОМАТИЧЕСКИЙ КОРПУС
+                </h2>
+                <button onclick="document.getElementById('diplomacyModal').style.display='none'" style="background: none; border: none; color: #fff; font-size: 1.5rem; cursor: pointer; transition: 0.3s;">
+                    <i class="fas fa-times-circle"></i>
+                </button>
+            </div>
+
+            <div style="display: flex; flex: 1; overflow: hidden;">
+                <!-- Left: Side List -->
+                <div style="width: 280px; background: rgba(0,0,0,0.3); border-right: 1px solid rgba(255,255,255,0.1); padding: 20px; overflow-y: auto;">
+                    <p style="color: #888; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 15px;">Известные государства</p>
+                    <div id="diplomacyCountryList" style="display: flex; flex-direction: column; gap: 10px;">
+                        <!-- Countries go here -->
+                    </div>
+                </div>
+
+                <!-- Right: Content Area -->
+                <div id="diploContent" style="flex: 1; padding: 30px; display: flex; flex-direction: column; background: rgba(26,26,46,0.5);">
+                    <div id="diploEmptyState" style="margin: auto; text-align: center; color: #666;">
+                        <i class="fas fa-map-marked-alt" style="font-size: 4rem; margin-bottom: 20px; opacity: 0.5;"></i>
+                        <p>Выберите государство из списка для начала переговоров</p>
+                    </div>
+
+                    <div id="diploInfoArea" style="display: none; height: 100%;">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px;">
+                            <div>
+                                <h3 id="diploSelectedName" style="margin: 0 0 5px 0; font-size: 1.8rem; color: #fff;">-</h3>
+                                <div id="diploStatus" style="font-size: 1rem;">-</div>
+                            </div>
+                            <div style="text-align: right;">
+                                <div style="font-size: 0.8rem; color: #aaa;">Репутация</div>
+                                <div style="color: #4CAF50; font-weight: bold;">Стабильная</div>
+                            </div>
+                        </div>
+
+                        <!-- Stats Grid -->
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px;">
+                            <div class="glass-card" style="padding: 15px; background: rgba(255,255,255,0.05); text-align: center;">
+                                <i class="fas fa-vector-square" style="color: #4a90e2; margin-bottom: 10px;"></i>
+                                <div style="font-size: 0.8rem; color: #888;">Территории</div>
+                                <div id="diploStatTerritories" style="font-size: 1.4rem; color: #fff; font-weight: bold;">0</div>
+                            </div>
+                            <div class="glass-card" style="padding: 15px; background: rgba(255,255,255,0.05); text-align: center;">
+                                <i class="fas fa-shield-alt" style="color: #e67e22; margin-bottom: 10px;"></i>
+                                <div style="font-size: 0.8rem; color: #888;">Военная мощь</div>
+                                <div id="diploStatPower" style="font-size: 1.4rem; color: #fff; font-weight: bold;">0</div>
+                            </div>
+                        </div>
+
+                        <div style="flex: 1; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 25px;">
+                            <h4 style="color: #aaa; font-size: 0.9rem; margin-bottom: 15px; text-transform: uppercase;">Дипломатические действия:</h4>
+                            <div id="diploActions" style="display: flex; flex-direction: column; gap: 12px;">
+                                <button id="diploBtnWar" class="historical-btn" style="background: #c62828; color: #fff; border: 1px solid #e53935;"><i class="fas fa-swords"></i> ОБЪЯВИТЬ ВОЙНУ</button>
+                                <button id="diploBtnAlliance" class="historical-btn" style="background: #1b5e20; color: #fff; border: 1px solid #2e7d32;"><i class="fas fa-handshake"></i> ПРЕДЛОЖИТЬ СОЮЗ</button>
+                                <button id="diploBtnBreak" class="historical-btn" style="background: #e65100; color: #fff; border: 1px solid #f57c00;"><i class="fas fa-heart-broken"></i> РАЗОРВАТЬ СОЮЗ</button>
+                                <button id="diploBtnPeace" class="historical-btn" style="background: #1565c0; color: #fff; border: 1px solid #1976d2;"><i class="fas fa-dove"></i> ПРЕДЛОЖИТЬ МИР</button>
+                            </div>
+                            <p id="diploInfoText" style="margin-top: 20px; font-size: 0.85rem; color: #888; font-style: italic;"></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    
+    <!-- Модальное окно УВЕДОМЛЕНИЙ (Дипломатическая почта) -->
+    <div id="notificationsModal" class="overlay" style="display: none;">
+        <div class="confirm-container glass-card" style="width: 450px; border-top: 3px solid #d4af37;">
+            <div class="confirm-header">
+                <i class="fas fa-envelope-open-text" style="color: #d4af37;"></i>
+                <h2>Дипломатическая почта</h2>
+                <button class="close-modal" onclick="document.getElementById('notificationsModal').style.display='none'">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <div id="notificationsList" class="notifications-list" style="max-height: 400px; overflow-y: auto; padding: 10px 0;">
+                <!-- Здесь будут предложения о союзе -->
+                <div style="text-align: center; padding: 30px; color: #666; font-style: italic;">
+                    Почтовый ящик пуст...
+                </div>
+            </div>
+            
+            <div class="confirm-actions" style="margin-top: 15px;">
+                <button onclick="document.getElementById('notificationsModal').style.display='none'" class="historical-btn btn-secondary" style="width: 100%;">
+                    Закрыть
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Модальное окно ТОРГОВЛИ -->
+    <div id="tradeModal" class="overlay" style="display: none;">
+        <div class="confirm-container glass-card" style="width: 550px; border-top: 3px solid #4CAF50;">
+            <div class="confirm-header">
+                <i class="fas fa-hand-holding-usd" style="color: #4CAF50;"></i>
+                <h2>Торговая палата</h2>
+                <button class="close-modal" onclick="document.getElementById('tradeModal').style.display='none'">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <div class="trade-tabs" style="display: flex; gap: 10px; margin-bottom: 20px;">
+                <button id="tabTradeMarket" class="auth-tab active" style="flex: 1;">Рынок</button>
+                <button id="tabTradeRequest" class="auth-tab" style="flex: 1;">Запрос союзникам</button>
+            </div>
+
+            <div id="tradeMarketSection">
+                <p style="color: #aaa; font-size: 0.9rem; margin-bottom: 15px;">Актуальные контракты на этот месяц:</p>
+                <div id="tradeOrdersList" class="notifications-list" style="max-height: 400px; overflow-y: auto;">
+                    <!-- Список ордеров -->
+                </div>
+            </div>
+
+            <div id="tradeRequestSection" style="display: none;">
+                <p style="color: #aaa; font-size: 0.9rem; margin-bottom: 15px;">Запросить ресурсы у союзников (Шанс успеха: 40%):</p>
+                <div id="tradeAllyList" class="notifications-list" style="max-height: 300px; overflow-y: auto; margin-bottom: 15px;">
+                    <!-- Список союзников -->
+                </div>
+                <div id="tradeRequestActions" style="display: none; padding: 15px; background: rgba(0,0,0,0.2); border-radius: 10px;">
+                    <p style="margin-bottom: 10px;">Запросить у <strong id="tradeSelectedAllyName" style="color: var(--accent-gold);">...</strong>:</p>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <button class="historical-btn" onclick="game.sendDirectRequest('wood')"><i class="fas fa-tree"></i> Дерево</button>
+                        <button class="historical-btn" onclick="game.sendDirectRequest('iron')"><i class="fas fa-hammer"></i> Железо</button>
+                        <button class="historical-btn" onclick="game.sendDirectRequest('coal')"><i class="fas fa-fire"></i> Уголь</button>
+                        <button class="historical-btn" onclick="game.sendDirectRequest('oil')"><i class="fas fa-oil-can"></i> Нефть</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="confirm-actions" style="margin-top: 15px;">
+                <button onclick="document.getElementById('tradeModal').style.display='none'" class="historical-btn btn-secondary" style="width: 100%;">
+                    Закрыть
+                </button>
+            </div>
+        </div>
+    </div>
+
+
+
+    <!-- Loading Transition Overlay -->
+    <div id="loadingTransition" class="loading-overlay" style="display: none;">
+        <div class="loading-content">
+            <div class="loading-art-container">
+                <div class="loading-art"></div>
+                <div class="loading-art-vignette"></div>
+            </div>
+            <div class="loading-text-container">
+                <h2 id="loadingTitle">Подготовка к завоеванию...</h2>
+                <div class="loading-bar-container">
+                    <div class="loading-bar-fill"></div>
+                </div>
+                <p id="loadingStatus">Загрузка данных карты...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Toast Notification System -->
+    <div id="toastContainer" class="toast-container"></div>
+    
+    <div id="customUIOverlay" class="custom-ui-overlay">
+        <div class="custom-ui-modal">
+            <div class="custom-ui-icon" id="customUIIcon">
+                <i class="fas fa-info-circle"></i>
+            </div>
+            <h3 class="custom-ui-title" id="customUITitle">Внимание</h3>
+            <p class="custom-ui-message" id="customUIMessage">Сообщение...</p>
+            <div class="custom-ui-footer" id="customUIFooter">
+                <button class="historical-btn" id="customUICancelBtn">Отмена</button>
+                <button class="historical-btn btn-xlarge" id="customUIConfirmBtn" style="margin: 0; padding: 10px 20px; font-size: 1rem;">ОК</button>
+            </div>
+        </div>
+    </div>
+
 </body>
 
 </html>

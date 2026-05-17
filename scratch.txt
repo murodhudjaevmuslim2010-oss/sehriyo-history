@@ -1,0 +1,9 @@
+
+script.js:2991:            this.generateMap();
+script.js:3056:            map: null, // Карта будет создана заново в generateMap
+script.js:3094:    generateMap() {
+script.js:4102:        game.generateMap();
+script.js:4144:    this.generateMap();
+script.js:4734:        this.generateMap();
+
+
